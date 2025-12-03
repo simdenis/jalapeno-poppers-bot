@@ -1,0 +1,33 @@
+name: Jalapeno Poppers Watcher
+
+on:
+  schedule:
+    # Runs every day at 8:00 AM Eastern (13:00 UTC in standard time)
+    - cron: "0 13 * * *"
+  workflow_dispatch:
+
+jobs:
+  check-poppers:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4 python-dotenv
+
+      - name: Run jalapeno watcher
+        env:
+          EMAIL_HOST: smtp.gmail.com
+          EMAIL_PORT: "587"
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: python main.py
