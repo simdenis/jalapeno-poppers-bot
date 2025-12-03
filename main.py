@@ -32,7 +32,6 @@ DINING_URLS = {
 
 # 2) Keywords to search for (case-insensitive)
 KEYWORDS = [
-    "Whole Egg",
     "jalapeño popper",
     "jalapeno popper",
     "jalapeño poppers",
