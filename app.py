@@ -11,6 +11,8 @@ DB_PATH = os.getenv("DB_PATH", "subscriptions.db")
 
 app = Flask(__name__)
 
+# ---------- DB SETUP ----------
+
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
@@ -25,9 +27,14 @@ def init_db():
     conn.commit()
     conn.close()
 
-# 🔑 THIS IS THE IMPORTANT LINE
+# run once when the module is imported (works for gunicorn + local)
 init_db()
 
+# ---------- CONSTANTS ----------
+
+DINING_HALLS = sorted(DINING_URLS.keys())
+
+# ---------- ROUTES ----------
 
 @app.route("/", methods=["GET"])
 def index():
@@ -137,5 +144,7 @@ def unsubscribe():
         message=msg,
         halls=DINING_HALLS,
     )
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=True)
