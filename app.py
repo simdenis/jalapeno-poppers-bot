@@ -1,15 +1,15 @@
-# app.py
 from flask import Flask, render_template, request
+import os
 import sqlite3
 import json
-from dining_checker import DINING_URLS  # reuse hall names
 from dotenv import load_dotenv
-import os
-load_dotenv()
-app = Flask(__name__)
-DB_PATH = os.getenv("DB_PATH", "subscriptions.db")
-DINING_HALLS = sorted(DINING_URLS.keys())
+from dining_checker import DINING_URLS
 
+load_dotenv()
+
+DB_PATH = os.getenv("DB_PATH", "subscriptions.db")
+
+app = Flask(__name__)
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -17,18 +17,17 @@ def init_db():
     cur.execute("""
     CREATE TABLE IF NOT EXISTS subscriptions (
         email TEXT PRIMARY KEY,
-        item_keywords TEXT NOT NULL,   -- JSON list of strings
-        halls TEXT,                    -- JSON list of hall names or NULL for "any hall"
-        last_notified_date TEXT        -- "YYYY-MM-DD" of last email
+        item_keywords TEXT NOT NULL,
+        halls TEXT,
+        last_notified_date TEXT
     );
     """)
     conn.commit()
     conn.close()
 
+# 🔑 THIS IS THE IMPORTANT LINE
+init_db()
 
-@app.before_first_request
-def setup_db():
-    init_db()
 
 @app.route("/", methods=["GET"])
 def index():
