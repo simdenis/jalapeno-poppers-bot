@@ -135,7 +135,7 @@ def unsubscribe():
         halls=DINING_HALLS,
     )
 
-
 if __name__ == "__main__":
-    init_db()
-    app.run(debug=True)
+    # For local dev
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=True)
+
