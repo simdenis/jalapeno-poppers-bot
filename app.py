@@ -26,6 +26,10 @@ def init_db():
     conn.close()
 
 
+@app.before_first_request
+def setup_db():
+    init_db()
+
 @app.route("/", methods=["GET"])
 def index():
     return render_template(
@@ -134,8 +138,5 @@ def unsubscribe():
         message=msg,
         halls=DINING_HALLS,
     )
-
 if __name__ == "__main__":
-    # For local dev
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=True)
-
