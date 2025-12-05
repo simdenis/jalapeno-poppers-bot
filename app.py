@@ -5,7 +5,8 @@ from datetime import date
 from dotenv import load_dotenv
 
 from db import get_conn
-from dining_checker import DINING_URLS
+from dining_checker import DINING_URLS, send_email
+
 
 load_dotenv()
 
@@ -123,6 +124,23 @@ def subscribe():
                     """,
                     (email, keywords_json, halls_json),
                 )
+                try:
+                    body_lines = [
+                        "Welcome to MIT Dining Alerts 🌶️",
+                        "",
+                        f"We'll email you when your magic words show up on the dining menus:",
+                        f"  • {', '.join(new_keywords)}",
+                        "",
+                        "You can update your magic words or unsubscribe any time from the site.",
+                    ]
+                    send_email(
+                        email,
+                        "Welcome to MIT Dining Alerts 🌶️",
+                        "\n".join(body_lines),
+                    )
+                except Exception as e:
+                    # keep this silent for the user; just log
+                    print(f"[WARN] Failed to send welcome email to {email}: {e}")
 
     return render_template(
         "index.html",
