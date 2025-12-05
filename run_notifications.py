@@ -1,11 +1,12 @@
 # run_notifications.py
+
 import os
 import json
 from datetime import date
 from dotenv import load_dotenv
 
 from db import get_conn
-from dining_checker import find_keyword_matches, send_email
+from dining_checker import find_item_locations, send_email
 
 load_dotenv()
 
@@ -63,6 +64,8 @@ def main():
     subscriptions = get_subscriptions()
 
     for email, keywords, halls, last_notified in subscriptions:
+        # Clean up keywords: strip whitespace, drop empties
+        keywords = [k.strip() for k in keywords if k and k.strip()]
         if not keywords:
             continue
 
@@ -70,39 +73,34 @@ def main():
         if last_notified is not None and last_notified >= today:
             continue
 
-        # Your existing function that scrapes menus and finds matches.
-        # Adjust call if your actual signature is different.
-        matches = find_keyword_matches(keywords, halls)
+        # Find which dining halls contain ANY of these keywords
+        # halls is either a list of hall names or None (meaning "all halls")
+        hall_hits = find_item_locations(keywords, halls_filter=halls)
 
-
-        # If nothing matched, you might want to skip sending an email.
-        if not matches:
+        # If no hall has any of the magic words, skip sending an email
+        if not hall_hits:
             continue
 
-        # Build a simple email body
+        # Build a simple email body: only halls, no dish names
         lines = [
             f"Dining alerts for {today.isoformat()}",
             "",
             f"Magic words: {', '.join(keywords)}",
             "",
+            "Found at:",
         ]
 
-        for hall_name, dishes in matches.items():
-            if not dishes:
-                continue
-            lines.append(f"{hall_name}:")
-            for dish in dishes:
-                lines.append(f"  - {dish}")
-            lines.append("")
+        for hall_name in hall_hits:
+            lines.append(f"  - {hall_name}")
 
         body = "\n".join(lines)
-
         subject = "MIT Dining Alerts 🌶️"
+
         send_email(email, subject, body)
 
         # Mark as notified today
         update_last_notified(email, today)
-#hello
+
 
 if __name__ == "__main__":
     main()
