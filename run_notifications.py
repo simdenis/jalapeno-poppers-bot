@@ -28,7 +28,7 @@ def update_last_notified(email: str, date_str: str):
                 (date_str, email),
             )
 
-
+#123
 
 def main():
     today = datetime.now().strftime("%Y-%m-%d")
