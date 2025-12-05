@@ -204,7 +204,7 @@ def extract_menu_items(html: str) -> list[str]:
     return sorted(items)
 
 
-def find_keyword_matches(keyword: str) -> dict:
+def find_keyword_matches(keyword: str, halls_filter = None) -> dict:
     """
     For a keyword like 'shrimp', return:
       {
