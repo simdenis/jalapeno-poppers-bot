@@ -31,6 +31,7 @@ def menu_contains_item(html: str, keywords: list[str]) -> bool:
     return False
 
 def find_item_locations(keywords: list[str]) -> list[str]:
+
     hits = []
     for hall, url in DINING_URLS.items():
         try:
@@ -213,7 +214,15 @@ def find_keyword_matches(keyword: str, halls_filter = None) -> dict:
         ...
       }
     """
-    keyword_lower = keyword.lower()
+    if isinstance(keyword, str):
+        keywords_list = [keyword]
+    else:
+        # assume it's an iterable like a list/tuple
+        keywords_list = list(keyword)
+
+    for keyword in keywords_list:
+        keyword_lower = keyword.lower()
+
     results = {}
 
     for hall, url in DINING_URLS.items():
