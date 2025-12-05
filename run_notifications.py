@@ -101,7 +101,7 @@ def main():
 
         # Mark as notified today
         update_last_notified(email, today)
-
+#hello
 
 if __name__ == "__main__":
     main()
