@@ -72,7 +72,8 @@ def main():
 
         # Your existing function that scrapes menus and finds matches.
         # Adjust call if your actual signature is different.
-        matches = find_keyword_matches(keywords, halls=halls)
+        matches = find_keyword_matches(keywords, halls)
+
 
         # If nothing matched, you might want to skip sending an email.
         if not matches:
