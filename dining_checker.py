@@ -43,7 +43,8 @@ def find_item_locations(keywords: list[str]) -> list[str]:
 
 # email settings from env
 EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
-EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+_email_port_str = os.getenv("EMAIL_PORT") or "587"
+EMAIL_PORT = int(_email_port_str)
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 EMAIL_FROM = EMAIL_USER
