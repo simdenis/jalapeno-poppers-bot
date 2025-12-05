@@ -47,29 +47,25 @@ EMAIL_PORT = int(_email_port_str)
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
-
+from email.message import EmailMessage
 
 def send_email(to_email: str, subject: str, body: str) -> None:
     if not EMAIL_USER or not EMAIL_PASSWORD:
         raise RuntimeError("EMAIL_USER or EMAIL_PASSWORD not set")
 
-    # Simple RFC 822 style message
-    msg = (
-        f"From: {EMAIL_USER}\r\n"
-        f"To: {to_email}\r\n"
-        f"Subject: {subject}\r\n"
-        "\r\n"
-        f"{body}"
-    )
+    # Build a proper UTF-8 email message
+    msg = EmailMessage()
+    msg["From"] = EMAIL_USER
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    msg.set_content(body)  # default is UTF-8
 
-    # Open a real connection to Gmail
     with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT) as server:
         server.ehlo()
         server.starttls()
         server.ehlo()
         server.login(EMAIL_USER, EMAIL_PASSWORD)
-        server.sendmail(EMAIL_USER, [to_email], msg)
-
+        server.send_message(msg)
 
 # dining_checker.py (add these imports if not already at top)
 # from bs4 import BeautifulSoup
