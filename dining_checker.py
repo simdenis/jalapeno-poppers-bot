@@ -41,11 +41,12 @@ def find_item_locations(keywords: list[str]) -> list[str]:
 import smtplib
 import os
 
-EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_HOST = os.getenv("EMAIL_HOST") or "smtp.gmail.com"
 _email_port_str = os.getenv("EMAIL_PORT") or "587"
 EMAIL_PORT = int(_email_port_str)
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+
 
 
 def send_email(to_email: str, subject: str, body: str) -> None:
