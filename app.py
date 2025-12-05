@@ -4,10 +4,10 @@ import sqlite3
 import json
 from dotenv import load_dotenv
 from dining_checker import DINING_URLS
+from db import get_conn
 
 load_dotenv()
 
-DB_PATH = os.getenv("DB_PATH", "subscriptions.db")
 ADMIN_DEBUG_TOKEN = os.getenv("ADMIN_DEBUG_TOKEN")
 
 app = Flask(__name__)
@@ -15,18 +15,17 @@ app = Flask(__name__)
 # ---------- DB SETUP ----------
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS subscriptions (
-        email TEXT PRIMARY KEY,
-        item_keywords TEXT NOT NULL,
-        halls TEXT,
-        last_notified_date TEXT
-    );
-    """)
-    conn.commit()
-    conn.close()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS subscriptions (
+                    email TEXT PRIMARY KEY,
+                    item_keywords TEXT NOT NULL,
+                    halls TEXT,
+                    last_notified_date DATE
+                );
+            """)
+
 
 # run once when the module is imported (works for gunicorn + local)
 init_db()
@@ -63,12 +62,13 @@ def subscribe():
             halls=DINING_HALLS,
         )
 
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-
-    # See if user already exists
-    cur.execute("SELECT item_keywords, halls FROM subscriptions WHERE email = ?", (email,))
-    row = cur.fetchone()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT item_keywords, halls FROM subscriptions WHERE email = %s",
+                (email,),
+            )
+            row = cur.fetchone()
 
     if row:
         current_kw_json, current_halls_json = row
@@ -92,22 +92,24 @@ def subscribe():
 
         halls_json = json.dumps(stored_halls) if stored_halls else None
 
-        cur.execute(
-            "UPDATE subscriptions SET item_keywords = ?, halls = ? WHERE email = ?",
-            (json.dumps(current_keywords), halls_json, email),
-        )
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE subscriptions SET item_keywords = %s, halls = %s WHERE email = %s",
+                    (json.dumps(current_keywords), halls_json, email),
+                )
+
     else:
         # New user
         keywords_json = json.dumps(new_keywords)
         halls_json = json.dumps(halls_list) if halls_list else None
-        cur.execute(
-            "INSERT INTO subscriptions (email, item_keywords, halls, last_notified_date) "
-            "VALUES (?, ?, ?, NULL)",
-            (email, keywords_json, halls_json),
-        )
-
-    conn.commit()
-    conn.close()
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO subscriptions (email, item_keywords, halls, last_notified_date) "
+                    "VALUES (%s, %s, %s, NULL)",
+                    (email, keywords_json, halls_json),
+                )
 
     return render_template(
         "index.html",
@@ -128,12 +130,10 @@ def unsubscribe():
             halls=DINING_HALLS,
         )
 
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("DELETE FROM subscriptions WHERE email = ?", (email,))
-    affected = cur.rowcount
-    conn.commit()
-    conn.close()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM subscriptions WHERE email = %s", (email,))
+            affected = cur.rowcount
 
     if affected == 0:
         msg = "No active subscriptions found for that email."
@@ -156,11 +156,13 @@ def debug_subscriptions():
     if not ADMIN_DEBUG_TOKEN or token != ADMIN_DEBUG_TOKEN:
         return "Forbidden", 403
 
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("SELECT email, item_keywords, halls, last_notified_date FROM subscriptions;")
-    rows = cur.fetchall()
-    conn.close()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT email, item_keywords, halls, last_notified_date "
+                "FROM subscriptions"
+            )
+            rows = cur.fetchall()
 
     # build quick HTML table
     html = ["<h1>Subscriptions</h1><table border='1' cellpadding='4'>"]

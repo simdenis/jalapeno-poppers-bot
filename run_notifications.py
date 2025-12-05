@@ -1,35 +1,33 @@
 # run_notifications.py
-import sqlite3
+
 import json
 from datetime import datetime
 from dining_checker import find_keyword_matches, send_email
 import os
 from dotenv import load_dotenv
+from db import get_conn
 
 load_dotenv()
-DB_PATH = os.getenv("DB_PATH", "subscriptions.db")
+
 
 def get_subscriptions():
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("""
-      SELECT email, item_keywords, halls, last_notified_date
-      FROM subscriptions;
-    """)
-    rows = cur.fetchall()
-    conn.close()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT email, item_keywords, halls, last_notified_date
+                FROM subscriptions;
+            """)
+            rows = cur.fetchall()
     return rows
 
-
 def update_last_notified(email: str, date_str: str):
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute(
-        "UPDATE subscriptions SET last_notified_date = ? WHERE email = ?",
-        (date_str, email),
-    )
-    conn.commit()
-    conn.close()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE subscriptions SET last_notified_date = %s WHERE email = %s",
+                (date_str, email),
+            )
+
 
 
 def main():
