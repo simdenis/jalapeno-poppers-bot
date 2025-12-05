@@ -8,6 +8,7 @@ from dining_checker import DINING_URLS
 load_dotenv()
 
 DB_PATH = os.getenv("DB_PATH", "subscriptions.db")
+ADMIN_DEBUG_TOKEN = os.getenv("ADMIN_DEBUG_TOKEN")
 
 app = Flask(__name__)
 
@@ -144,6 +145,37 @@ def unsubscribe():
         message=msg,
         halls=DINING_HALLS,
     )
+
+@app.route("/debug/subscriptions")
+def debug_subscriptions():
+    """Very simple debug view to inspect subscriptions.
+       Protected by ?token=... so random people can't see it.
+       REMOVE OR LOCK DOWN once you're done debugging.
+    """
+    token = request.args.get("token", "")
+    if not ADMIN_DEBUG_TOKEN or token != ADMIN_DEBUG_TOKEN:
+        return "Forbidden", 403
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT email, item_keywords, halls, last_notified_date FROM subscriptions;")
+    rows = cur.fetchall()
+    conn.close()
+
+    # build quick HTML table
+    html = ["<h1>Subscriptions</h1><table border='1' cellpadding='4'>"]
+    html.append("<tr><th>Email</th><th>Keywords (JSON)</th><th>Halls (JSON)</th><th>Last notified</th></tr>")
+    for email, kw_json, halls_json, last_date in rows:
+        html.append(
+            f"<tr>"
+            f"<td>{email}</td>"
+            f"<td><code>{kw_json}</code></td>"
+            f"<td><code>{halls_json}</code></td>"
+            f"<td>{last_date}</td>"
+            f"</tr>"
+        )
+    html.append("</table>")
+    return "\n".join(html)
 
 
 if __name__ == "__main__":
