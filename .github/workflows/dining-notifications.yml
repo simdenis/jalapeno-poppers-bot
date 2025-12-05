@@ -1,0 +1,38 @@
+name: Daily Dining Notifications
+
+on:
+  schedule:
+    # Every day at 12:00 UTC
+    # 7:00 AM Eastern (standard time), 8:00 AM in daylight savings
+    - cron: '0 12 * * *'
+  workflow_dispatch: {}  # allow manual run from GitHub UI
+
+jobs:
+  send-notifications:
+    runs-on: ubuntu-latest
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
+      EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
+      EMAIL_USER: ${{ secrets.EMAIL_USER }}
+      EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+      ADMIN_DEBUG_TOKEN: ${{ secrets.ADMIN_DEBUG_TOKEN }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run notification script
+        run: |
+          python run_notifications.py
