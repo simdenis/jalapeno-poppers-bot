@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from db import get_conn
 from dining_checker import find_keyword_details, send_email
-
+DEBUG_ALWAYS_NOTIFY = os.getenv("DEBUG_ALWAYS_NOTIFY", "false").lower() == "true"
 load_dotenv()
 
 
@@ -70,8 +70,9 @@ def main():
             continue
 
         # Only send at most once per day per user
-        if last_notified is not None and last_notified >= today:
-            continue
+        if not DEBUG_ALWAYS_NOTIFY:
+            if last_notified is not None and last_notified >= today:
+                continue
 
         # Find detailed matches: hall -> keyword -> {meals}
         details = find_keyword_details(keywords, halls_filter=halls)
