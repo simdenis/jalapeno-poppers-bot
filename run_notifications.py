@@ -6,7 +6,7 @@ from datetime import date
 from dotenv import load_dotenv
 
 from db import get_conn
-from dining_checker import find_item_locations, send_email
+from dining_checker import find_keyword_details, send_email
 
 load_dotenv()
 
@@ -73,25 +73,35 @@ def main():
         if last_notified is not None and last_notified >= today:
             continue
 
-        # Find which dining halls contain ANY of these keywords
-        # halls is either a list of hall names or None (meaning "all halls")
-        hall_hits = find_item_locations(keywords, halls_filter=halls)
+        # Find detailed matches: hall -> keyword -> {meals}
+        details = find_keyword_details(keywords, halls_filter=halls)
 
-        # If no hall has any of the magic words, skip sending an email
-        if not hall_hits:
+        if not details:
             continue
 
-        # Build a simple email body: only halls, no dish names
         lines = [
             f"Dining alerts for {today.isoformat()}",
             "",
             f"Magic words: {', '.join(keywords)}",
             "",
-            "Found at:",
+            "Matches:",
         ]
 
-        for hall_name in hall_hits:
-            lines.append(f"  - {hall_name}")
+        # Example structure in email:
+        # Simmons Hall:
+        #   - jalapeno — Lunch, Dinner
+        #   - shrimp — Dinner
+        for hall_name in sorted(details.keys()):
+            hall_data = details[hall_name]
+            lines.append(f"{hall_name}:")
+
+            for kw in sorted(hall_data.keys()):
+                meals = sorted(hall_data[kw])
+                meal_str = ", ".join(meals)
+                lines.append(f"  - {kw} — {meal_str}")
+
+            lines.append("")  # blank line between halls
+
 
         body = "\n".join(lines)
         subject = "MIT Dining Alerts 🌶️"
