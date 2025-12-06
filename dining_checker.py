@@ -109,7 +109,7 @@ def send_email(to_email: str, subject: str, body: str) -> None:
     msg["Subject"] = subject
     msg.set_content(body)  # UTF-8 by default
 
-    with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT) as server:
+    with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT, timeout=5) as server:
         server.ehlo()
         server.starttls()
         server.ehlo()
