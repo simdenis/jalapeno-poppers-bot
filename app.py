@@ -30,6 +30,10 @@ MAGIC_TOKEN_TTL_MINUTES = int(os.getenv("MAGIC_TOKEN_TTL_MINUTES", "30"))
 LOGIN_RATE_LIMIT_ENABLED = os.getenv("LOGIN_RATE_LIMIT_ENABLED", "true").lower() == "true"
 LOGIN_RATE_LIMIT_WINDOW_MINUTES = int(os.getenv("LOGIN_RATE_LIMIT_WINDOW_MINUTES", "10"))
 LOGIN_RATE_LIMIT_MAX = int(os.getenv("LOGIN_RATE_LIMIT_MAX", "3"))
+UNSUBSCRIBE_TOKEN_TTL_DAYS = int(os.getenv("UNSUBSCRIBE_TOKEN_TTL_DAYS", "30"))
+RATE_LIMIT_BYPASS_EMAILS = {
+    "simdenis@mit.edu",
+}
 
 # ------------------ DB SETUP ------------------
 
@@ -109,6 +113,8 @@ def _create_login_token(email: str) -> str:
 def _is_rate_limited(email: str) -> bool:
     if not LOGIN_RATE_LIMIT_ENABLED:
         return False
+    if email.lower() in RATE_LIMIT_BYPASS_EMAILS:
+        return False
     window_start = datetime.utcnow() - timedelta(minutes=LOGIN_RATE_LIMIT_WINDOW_MINUTES)
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -123,6 +129,46 @@ def _is_rate_limited(email: str) -> bool:
             )
             count = cur.fetchone()[0]
     return count >= LOGIN_RATE_LIMIT_MAX
+
+
+def _create_unsubscribe_token(user_id: int) -> str:
+    token = secrets.token_urlsafe(32)
+    token_hash = _hash_token(token)
+    expires_at = datetime.utcnow() + timedelta(days=UNSUBSCRIBE_TOKEN_TTL_DAYS)
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM unsubscribe_tokens WHERE expires_at < NOW()"
+            )
+            cur.execute(
+                """
+                INSERT INTO unsubscribe_tokens (token_hash, user_id, expires_at)
+                VALUES (%s, %s, %s)
+                """,
+                (token_hash, user_id, expires_at),
+            )
+    return token
+
+
+def _consume_unsubscribe_token(token: str):
+    token_hash = _hash_token(token)
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT user_id FROM unsubscribe_tokens
+                WHERE token_hash = %s AND expires_at > NOW()
+                """,
+                (token_hash,),
+            )
+            row = cur.fetchone()
+            if row:
+                cur.execute(
+                    "DELETE FROM unsubscribe_tokens WHERE token_hash = %s",
+                    (token_hash,),
+                )
+                return row[0]
+    return None
 
 
 def _consume_login_token(token: str):
@@ -595,6 +641,36 @@ def unsubscribe():
         is_logged_in=True,
         user_email=email,
     )
+
+
+@app.route("/unsubscribe/confirm", methods=["GET", "POST"])
+def unsubscribe_confirm():
+    if request.method == "POST":
+        token = request.form.get("token", "")
+        if not token:
+            return "Invalid unsubscribe link", 400
+
+        user_id = _consume_unsubscribe_token(token)
+        if not user_id:
+            return "Unsubscribe link expired or invalid", 400
+
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM subscriptions WHERE user_id = %s", (user_id,))
+
+        return render_template(
+            "index.html",
+            message="You’ve been unsubscribed from all alerts for this email.",
+            halls=DINING_HALLS,
+            csrf_token=get_csrf_token(),
+            is_logged_in="user_id" in session,
+            user_email=session.get("user_email", ""),
+        )
+
+    token = request.args.get("token", "")
+    if not token:
+        return "Invalid unsubscribe link", 400
+    return render_template("unsubscribe_confirm.html", token=token)
 
 
 # --------------- DEBUG VIEW (admin only) ---------------

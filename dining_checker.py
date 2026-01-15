@@ -4,11 +4,13 @@ import os
 import smtplib
 from email.message import EmailMessage
 from typing import Dict, List, Set
+from datetime import date
 import re
 import unicodedata
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from db import get_conn
 
 
 # ----------------------------
@@ -36,17 +38,54 @@ _email_port_str = os.getenv("EMAIL_PORT") or "587"
 EMAIL_PORT = int(_email_port_str)
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+MENU_CACHE_ENABLED = os.getenv("MENU_CACHE_ENABLED", "true").lower() == "true"
 
 
 # ----------------------------
 # Core scraping helpers
 # ----------------------------
 
-def fetch_menu(url: str) -> str:
+def _get_cached_menu(hall: str, menu_date: date) -> str | None:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT html FROM menu_cache
+                WHERE hall = %s AND menu_date = %s
+                """,
+                (hall, menu_date),
+            )
+            row = cur.fetchone()
+    return row[0] if row else None
+
+
+def _set_cached_menu(hall: str, menu_date: date, html: str) -> None:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO menu_cache (hall, menu_date, html)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (hall, menu_date) DO UPDATE
+                SET html = EXCLUDED.html, fetched_at = NOW()
+                """,
+                (hall, menu_date, html),
+            )
+
+
+def fetch_menu(hall: str, url: str) -> str:
     """Fetch raw HTML for a dining hall menu."""
+    today = date.today()
+    if MENU_CACHE_ENABLED:
+        cached = _get_cached_menu(hall, today)
+        if cached:
+            return cached
     resp = requests.get(url, timeout=15)
     resp.raise_for_status()
-    return resp.text
+    html = resp.text
+    if MENU_CACHE_ENABLED:
+        _set_cached_menu(hall, today, html)
+    return html
 
 
 def _normalize_text(text: str) -> str:
@@ -109,7 +148,7 @@ def find_item_locations(keywords: list[str], halls_filter = None) -> list[str]:
             continue
 
         try:
-            html = fetch_menu(url)
+            html = fetch_menu(hall, url)
             if page_contains_any_keyword(html, keywords):
                 hits.append(hall)
         except Exception as e:
@@ -160,7 +199,7 @@ def find_keyword_details(
             continue
 
         try:
-            html = fetch_menu(url)
+            html = fetch_menu(hall, url)
         except Exception as e:
             print(f"[WARN] Failed to fetch menu for {hall}: {e}")
             continue

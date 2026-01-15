@@ -2,13 +2,16 @@
 
 import os
 import json
-from datetime import date
+import hashlib
+from datetime import date, datetime, timedelta
 from dotenv import load_dotenv
 
 from db import get_conn, ensure_schema
 from dining_checker import find_keyword_details, send_email
 load_dotenv()
 DEBUG_ALWAYS_NOTIFY = os.getenv("DEBUG_ALWAYS_NOTIFY", "false").lower() == "true"
+BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
+UNSUBSCRIBE_TOKEN_TTL_DAYS = int(os.getenv("UNSUBSCRIBE_TOKEN_TTL_DAYS", "30"))
 
 
 def get_subscriptions():
@@ -60,6 +63,35 @@ def update_last_notified(email: str, when: date):
             )
 
 
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _create_unsubscribe_token_for_email(email: str) -> str | None:
+    if not BASE_URL:
+        return None
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM users WHERE email = %s", (email,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            user_id = row[0]
+
+            token = os.urandom(24).hex()
+            token_hash = _hash_token(token)
+            expires_at = datetime.utcnow() + timedelta(days=UNSUBSCRIBE_TOKEN_TTL_DAYS)
+            cur.execute(
+                """
+                INSERT INTO unsubscribe_tokens (token_hash, user_id, expires_at)
+                VALUES (%s, %s, %s)
+                """,
+                (token_hash, user_id, expires_at),
+            )
+            return token
+
+
 def main():
     ensure_schema()
     today = date.today()
@@ -105,6 +137,16 @@ def main():
 
             lines.append("")  # blank line between halls
 
+
+        unsubscribe_token = _create_unsubscribe_token_for_email(email)
+        if unsubscribe_token:
+            lines.extend(
+                [
+                    "",
+                    "Unsubscribe:",
+                    f"{BASE_URL}/unsubscribe/confirm?token={unsubscribe_token}",
+                ]
+            )
 
         body = "\n".join(lines)
         subject = "MIT Dining Alerts 🌶️"

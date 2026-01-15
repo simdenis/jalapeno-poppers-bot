@@ -41,6 +41,8 @@ Optional:
 - `LOGIN_RATE_LIMIT_ENABLED` (`true`/`false`, default `true`)
 - `LOGIN_RATE_LIMIT_WINDOW_MINUTES` (default `10`)
 - `LOGIN_RATE_LIMIT_MAX` (default `3`)
+- `UNSUBSCRIBE_TOKEN_TTL_DAYS` (default `30`)
+- `MENU_CACHE_ENABLED` (`true`/`false`, default `true`)
 
 ## Auth behavior
 

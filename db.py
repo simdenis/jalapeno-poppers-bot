@@ -82,6 +82,27 @@ def ensure_schema():
             )
             cur.execute(
                 """
+                CREATE TABLE IF NOT EXISTS unsubscribe_tokens (
+                    token_hash TEXT PRIMARY KEY,
+                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    expires_at TIMESTAMPTZ NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS menu_cache (
+                    hall TEXT NOT NULL,
+                    menu_date DATE NOT NULL,
+                    html TEXT NOT NULL,
+                    fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY (hall, menu_date)
+                );
+                """
+            )
+            cur.execute(
+                """
                 DO $$
                 BEGIN
                     IF NOT EXISTS (
