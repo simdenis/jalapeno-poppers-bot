@@ -5,6 +5,7 @@ import secrets
 import hashlib
 from datetime import date, datetime, timedelta
 from functools import wraps
+from collections import Counter
 from dotenv import load_dotenv
 from db import get_conn, ensure_schema
 from dining_checker import DINING_URLS, find_keyword_details, send_email
@@ -331,6 +332,104 @@ def profile():
         matches=matches,
         user_email=session.get("user_email", ""),
         profile_url=url_for("profile"),
+        csrf_token=get_csrf_token(),
+    )
+
+
+@app.route("/profile/remove-keyword", methods=["POST"])
+@login_required
+def remove_keyword():
+    if not validate_csrf():
+        return "Bad Request", 400
+
+    keyword = request.form.get("keyword", "").strip()
+    if not keyword:
+        return redirect(url_for("profile"))
+
+    subscription = _get_subscription(session["user_id"])
+    if not subscription:
+        return redirect(url_for("profile"))
+
+    keywords = [k for k in subscription["keywords"] if k != keyword]
+    halls = subscription["halls"] or []
+    halls_json = json.dumps(halls) if halls else None
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE subscriptions
+                SET item_keywords = %s, halls = %s
+                WHERE user_id = %s
+                """,
+                (json.dumps(keywords), halls_json, session["user_id"]),
+            )
+
+    return redirect(url_for("profile"))
+
+
+@app.route("/profile/remove-hall", methods=["POST"])
+@login_required
+def remove_hall():
+    if not validate_csrf():
+        return "Bad Request", 400
+
+    hall = request.form.get("hall", "").strip()
+    if not hall:
+        return redirect(url_for("profile"))
+
+    subscription = _get_subscription(session["user_id"])
+    if not subscription:
+        return redirect(url_for("profile"))
+
+    halls = [h for h in subscription["halls"] if h != hall]
+    keywords = subscription["keywords"] or []
+    halls_json = json.dumps(halls) if halls else None
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE subscriptions
+                SET item_keywords = %s, halls = %s
+                WHERE user_id = %s
+                """,
+                (json.dumps(keywords), halls_json, session["user_id"]),
+            )
+
+    return redirect(url_for("profile"))
+
+
+@app.route("/stats", methods=["GET"])
+def stats():
+    keyword_counts = Counter()
+    hall_counts = Counter()
+    total_subscriptions = 0
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT item_keywords, halls FROM subscriptions")
+            rows = cur.fetchall()
+
+    for kw_json, halls_json in rows:
+        total_subscriptions += 1
+        try:
+            keywords = json.loads(kw_json) if kw_json else []
+        except Exception:
+            keywords = []
+        try:
+            halls = json.loads(halls_json) if halls_json else []
+        except Exception:
+            halls = []
+
+        keyword_counts.update([k for k in keywords if k])
+        hall_counts.update([h for h in halls if h])
+
+    return render_template(
+        "stats.html",
+        total_subscriptions=total_subscriptions,
+        keyword_counts=keyword_counts.most_common(20),
+        hall_counts=hall_counts.most_common(10),
     )
 
 

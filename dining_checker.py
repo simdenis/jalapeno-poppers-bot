@@ -170,7 +170,7 @@ def find_keyword_details(
         text_lower = _normalize_text(text)
 
         # --- Build meal segments heuristically ---
-        meal_names = ["breakfast", "lunch", "dinner"]
+        meal_names = ["breakfast", "brunch", "lunch", "dinner"]
         markers = []
 
         for meal in meal_names:

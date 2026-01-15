@@ -65,7 +65,13 @@
         {% if subscription.keywords %}
           <div class="d-flex flex-wrap gap-2">
             {% for kw in subscription.keywords %}
-              <span class="badge badge-keyword rounded-pill px-3 py-2">{{ kw }}</span>
+              <form method="post" action="{{ url_for('remove_keyword') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="keyword" value="{{ kw }}">
+                <button type="submit" class="badge badge-keyword rounded-pill px-3 py-2 border-0">
+                  {{ kw }} ✕
+                </button>
+              </form>
             {% endfor %}
           </div>
         {% else %}
@@ -78,7 +84,13 @@
         {% if subscription.halls %}
           <div class="d-flex flex-wrap gap-2">
             {% for hall in subscription.halls %}
-              <span class="badge badge-hall rounded-pill px-3 py-2">{{ hall }}</span>
+              <form method="post" action="{{ url_for('remove_hall') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="hall" value="{{ hall }}">
+                <button type="submit" class="badge badge-hall rounded-pill px-3 py-2 border-0">
+                  {{ hall }} ✕
+                </button>
+              </form>
             {% endfor %}
           </div>
         {% else %}

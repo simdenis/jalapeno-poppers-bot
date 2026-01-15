@@ -199,11 +199,12 @@
       <span>MIT Dining Radar</span>
     </div>
     {% if is_logged_in %}
-      <div class="mb-2">
+      <div class="mb-2 d-flex flex-wrap align-items-center justify-content-center gap-2">
         <span class="badge rounded-pill bg-light text-dark border">
           Signed in as {{ user_email }}
         </span>
-        <a class="ms-2 small text-decoration-none" href="{{ url_for('logout') }}">Sign out</a>
+        <a class="btn btn-sm btn-primary" href="{{ profile_url }}">Profile</a>
+        <a class="small text-decoration-none" href="{{ url_for('logout') }}">Sign out</a>
       </div>
     {% else %}
       <div class="mb-2">
