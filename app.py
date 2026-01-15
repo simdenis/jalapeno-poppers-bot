@@ -26,6 +26,9 @@ ADMIN_EMAILS = {
 BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
 MIT_EMAIL_DOMAIN = "mit.edu"
 MAGIC_TOKEN_TTL_MINUTES = int(os.getenv("MAGIC_TOKEN_TTL_MINUTES", "30"))
+LOGIN_RATE_LIMIT_ENABLED = os.getenv("LOGIN_RATE_LIMIT_ENABLED", "true").lower() == "true"
+LOGIN_RATE_LIMIT_WINDOW_MINUTES = int(os.getenv("LOGIN_RATE_LIMIT_WINDOW_MINUTES", "10"))
+LOGIN_RATE_LIMIT_MAX = int(os.getenv("LOGIN_RATE_LIMIT_MAX", "3"))
 
 # ------------------ DB SETUP ------------------
 
@@ -103,7 +106,9 @@ def _create_login_token(email: str) -> str:
 
 
 def _is_rate_limited(email: str) -> bool:
-    window_start = datetime.utcnow() - timedelta(minutes=10)
+    if not LOGIN_RATE_LIMIT_ENABLED:
+        return False
+    window_start = datetime.utcnow() - timedelta(minutes=LOGIN_RATE_LIMIT_WINDOW_MINUTES)
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -116,7 +121,7 @@ def _is_rate_limited(email: str) -> bool:
                 (email, window_start),
             )
             count = cur.fetchone()[0]
-    return count >= 3
+    return count >= LOGIN_RATE_LIMIT_MAX
 
 
 def _consume_login_token(token: str):

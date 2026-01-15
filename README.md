@@ -38,6 +38,9 @@ Optional:
 - `DEBUG_ALWAYS_NOTIFY` (`true`/`false`, for dev)
 - `BASE_URL` (public app URL, used to generate magic login links)
 - `MAGIC_TOKEN_TTL_MINUTES` (default `30`)
+- `LOGIN_RATE_LIMIT_ENABLED` (`true`/`false`, default `true`)
+- `LOGIN_RATE_LIMIT_WINDOW_MINUTES` (default `10`)
+- `LOGIN_RATE_LIMIT_MAX` (default `3`)
 
 ## Auth behavior
 
