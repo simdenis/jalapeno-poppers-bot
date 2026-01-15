@@ -24,6 +24,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Show commit SHA
+        run: |
+          echo "Commit: $GITHUB_SHA"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
