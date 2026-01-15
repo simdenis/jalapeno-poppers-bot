@@ -1,7 +1,7 @@
 # db.py
 import os
 from dotenv import load_dotenv
-import psycopg
+import psycopg2
 
 load_dotenv()
 
@@ -13,10 +13,12 @@ if not DATABASE_URL:
 
 def get_conn():
     """
-    Return a psycopg3 connection to Postgres.
+    Return a psycopg2 connection to Postgres.
     autocommit=True so we don't have to call conn.commit() manually.
     """
-    return psycopg.connect(DATABASE_URL, autocommit=True)
+    conn = psycopg2.connect(DATABASE_URL)
+    conn.autocommit = True
+    return conn
 
 
 def ensure_schema():
@@ -73,8 +75,22 @@ def ensure_schema():
                     token_hash TEXT PRIMARY KEY,
                     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
                     expires_at TIMESTAMPTZ NOT NULL,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    uses_left INTEGER NOT NULL DEFAULT 2
                 );
+                """
+            )
+            cur.execute(
+                """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'login_tokens' AND column_name = 'uses_left'
+                    ) THEN
+                        ALTER TABLE login_tokens ADD COLUMN uses_left INTEGER NOT NULL DEFAULT 2;
+                    END IF;
+                END $$;
                 """
             )
 

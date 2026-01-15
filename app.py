@@ -97,10 +97,10 @@ def _create_login_token(email: str) -> str:
             )
             cur.execute(
                 """
-                INSERT INTO login_tokens (token_hash, user_id, expires_at)
-                VALUES (%s, %s, %s)
+                INSERT INTO login_tokens (token_hash, user_id, expires_at, uses_left)
+                VALUES (%s, %s, %s, %s)
                 """,
-                (token_hash, user_id, expires_at),
+                (token_hash, user_id, expires_at, 2),
             )
     return token
 
@@ -130,17 +130,30 @@ def _consume_login_token(token: str):
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT user_id FROM login_tokens
+                SELECT user_id, uses_left FROM login_tokens
                 WHERE token_hash = %s AND expires_at > NOW()
                 """,
                 (token_hash,),
             )
             row = cur.fetchone()
-            cur.execute(
-                "DELETE FROM login_tokens WHERE token_hash = %s",
-                (token_hash,),
-            )
-    return row[0] if row else None
+            if row:
+                user_id, uses_left = row
+                uses_left -= 1
+                if uses_left <= 0:
+                    cur.execute(
+                        "DELETE FROM login_tokens WHERE token_hash = %s",
+                        (token_hash,),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        UPDATE login_tokens SET uses_left = %s
+                        WHERE token_hash = %s
+                        """,
+                        (uses_left, token_hash),
+                    )
+                return user_id
+    return None
 
 
 def _get_subscription(user_id: int):
