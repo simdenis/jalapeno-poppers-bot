@@ -1,10 +1,9 @@
 # dining_checker.py
 
 import os
-import re
 import smtplib
 from email.message import EmailMessage
-
+from typing import Dict, List, Set
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -91,9 +90,6 @@ def find_item_locations(keywords: list[str], halls_filter = None) -> list[str]:
 
     return hits
 
-
-from typing import Dict, List, Set
-# ... rest of your imports at top of dining_checker.py
 
 
 def find_keyword_details(

@@ -5,10 +5,10 @@ import json
 from datetime import date
 from dotenv import load_dotenv
 
-from db import get_conn
+from db import get_conn, ensure_schema
 from dining_checker import find_keyword_details, send_email
-DEBUG_ALWAYS_NOTIFY = os.getenv("DEBUG_ALWAYS_NOTIFY", "false").lower() == "true"
 load_dotenv()
+DEBUG_ALWAYS_NOTIFY = os.getenv("DEBUG_ALWAYS_NOTIFY", "false").lower() == "true"
 
 
 def get_subscriptions():
@@ -20,8 +20,9 @@ def get_subscriptions():
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT email, item_keywords, halls, last_notified_date
-                FROM subscriptions
+                SELECT u.email, s.item_keywords, s.halls, s.last_notified_date
+                FROM subscriptions s
+                JOIN users u ON u.id = s.user_id
                 """
             )
             rows = cur.fetchall()
@@ -60,6 +61,7 @@ def update_last_notified(email: str, when: date):
 
 
 def main():
+    ensure_schema()
     today = date.today()
     subscriptions = get_subscriptions()
 

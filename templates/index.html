@@ -198,6 +198,27 @@
       <span class="card-pill">🌶️</span>
       <span>MIT Dining Radar</span>
     </div>
+    {% if is_logged_in %}
+      <div class="mb-2">
+        <span class="badge rounded-pill bg-light text-dark border">
+          Signed in as {{ user_email }}
+        </span>
+        <a class="ms-2 small text-decoration-none" href="{{ url_for('logout') }}">Sign out</a>
+      </div>
+    {% else %}
+      <div class="mb-2">
+        <form class="d-inline-flex gap-2" method="post" action="{{ url_for('login_start') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="next" value="{{ login_next }}">
+          <input type="email"
+                 class="form-control form-control-sm"
+                 name="email"
+                 placeholder="you@mit.edu"
+                 required>
+          <button class="btn btn-outline-dark btn-sm" type="submit">Email me a sign-in link</button>
+        </form>
+      </div>
+    {% endif %}
     <h1 class="hero-title mb-2">Get a heads-up on your favorite foods</h1>
     <p class="hero-subtitle">
       Tell us your <strong>magic words</strong> (“jalapeño”, “tater tots”, “shrimp”) and we’ll email you
@@ -220,17 +241,9 @@
           <p class="card-title-main mb-0">Subscribe / Update</p>
         </div>
         <div class="card-body">
+          {% if is_logged_in %}
           <form method="post" action="{{ url_for('subscribe') }}">
-            <div class="mb-3">
-              <label for="email" class="form-label">Email</label>
-              <input type="email"
-                     class="form-control"
-                     id="email"
-                     name="email"
-                     placeholder="you@mit.edu"
-                     required>
-            </div>
-
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <div class="mb-3">
               <label for="keywords" class="form-label">Magic words</label>
               <input type="text"
@@ -261,9 +274,14 @@
               Save my alerts
             </button>
             <div class="form-text mt-2">
-              Re-subscribing with the same email will <strong>add</strong> new magic words and halls instead of overwriting.
+              Re-submitting will <strong>add</strong> new magic words and halls instead of overwriting.
             </div>
           </form>
+          {% else %}
+          <p class="mb-0 text-muted">
+            Sign in with your MIT account to manage your alerts.
+          </p>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -274,22 +292,20 @@
         <div class="unsubscribe-body">
           <div class="unsubscribe-title">Not feeling the heat?</div>
           <p class="unsubscribe-text mb-3">
-            Drop your email and we’ll unsubscribe you from all alerts. No spam, no drama.
+            One click and we’ll unsubscribe you from all alerts. No spam, no drama.
           </p>
+          {% if is_logged_in %}
           <form method="post" action="{{ url_for('unsubscribe') }}">
-            <div class="mb-2">
-              <label for="unsub_email" class="form-label">Email</label>
-              <input type="email"
-                     class="form-control"
-                     id="unsub_email"
-                     name="email"
-                     placeholder="you@mit.edu"
-                     required>
-            </div>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit" class="btn btn-outline-danger w-100">
               Unsubscribe from everything
             </button>
           </form>
+          {% else %}
+          <p class="mb-0 text-muted">
+            Sign in with MIT to unsubscribe.
+          </p>
+          {% endif %}
         </div>
       </div>
     </div>

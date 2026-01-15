@@ -1,42 +1,128 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, session, redirect, url_for
 import os
 import json
-from datetime import date
+import secrets
+import hashlib
+from datetime import date, datetime, timedelta
+from functools import wraps
 from dotenv import load_dotenv
-from db import get_conn
+from db import get_conn, ensure_schema
 from dining_checker import DINING_URLS, send_email
 
 
 load_dotenv()
 
 app = Flask(__name__)
+app.secret_key = os.getenv("FLASK_SECRET_KEY")
+if not app.secret_key:
+    raise RuntimeError("FLASK_SECRET_KEY is not set")
+
 SEND_WELCOME = os.getenv("SEND_WELCOME_EMAILS", "false").lower() == "true"
-ADMIN_DEBUG_TOKEN = os.getenv("ADMIN_DEBUG_TOKEN")
+ADMIN_EMAILS = {
+    e.strip().lower()
+    for e in os.getenv("ADMIN_EMAILS", "").split(",")
+    if e.strip()
+}
+BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
+MIT_EMAIL_DOMAIN = "mit.edu"
+MAGIC_TOKEN_TTL_MINUTES = int(os.getenv("MAGIC_TOKEN_TTL_MINUTES", "30"))
 
 # ------------------ DB SETUP ------------------
 
 
-def init_db():
-    """
-    Create the subscriptions table in Postgres if it does not exist.
-    We store keywords and halls as JSON-encoded TEXT for simplicity.
-    """
+def login_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if "user_id" not in session:
+            return redirect(url_for("index", next=request.path))
+        return fn(*args, **kwargs)
+
+    return wrapper
+
+
+def get_csrf_token():
+    token = session.get("csrf_token")
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session["csrf_token"] = token
+    return token
+
+
+def validate_csrf():
+    token = request.form.get("csrf_token", "")
+    return token and token == session.get("csrf_token")
+
+
+def _is_admin_email(email: str) -> bool:
+    return email.lower() in ADMIN_EMAILS
+
+
+def _is_mit_email(email: str) -> bool:
+    return email.lower().endswith(f"@{MIT_EMAIL_DOMAIN}")
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _upsert_user_by_email(email: str) -> int:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, oidc_sub FROM users WHERE email = %s", (email,))
+            row = cur.fetchone()
+            if row:
+                return user_id
+
+            cur.execute(
+                "INSERT INTO users (email) VALUES (%s) RETURNING id",
+                (email,),
+            )
+            return cur.fetchone()[0]
+
+
+def _create_login_token(email: str) -> str:
+    user_id = _upsert_user_by_email(email)
+    token = secrets.token_urlsafe(32)
+    token_hash = _hash_token(token)
+    expires_at = datetime.utcnow() + timedelta(minutes=MAGIC_TOKEN_TTL_MINUTES)
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                CREATE TABLE IF NOT EXISTS subscriptions (
-                    email TEXT PRIMARY KEY,
-                    item_keywords TEXT NOT NULL,
-                    halls TEXT,
-                    last_notified_date DATE
-                );
+                DELETE FROM login_tokens WHERE expires_at < NOW()
                 """
             )
+            cur.execute(
+                """
+                INSERT INTO login_tokens (token_hash, user_id, expires_at)
+                VALUES (%s, %s, %s)
+                """,
+                (token_hash, user_id, expires_at),
+            )
+    return token
+
+
+def _consume_login_token(token: str):
+    token_hash = _hash_token(token)
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT user_id FROM login_tokens
+                WHERE token_hash = %s AND expires_at > NOW()
+                """,
+                (token_hash,),
+            )
+            row = cur.fetchone()
+            cur.execute(
+                "DELETE FROM login_tokens WHERE token_hash = %s",
+                (token_hash,),
+            )
+    return row[0] if row else None
 
 
 # Run once at import time so gunicorn + local both get the table.
-init_db()
+ensure_schema()
 
 DINING_HALLS = sorted(DINING_URLS.keys())
 
@@ -46,16 +132,99 @@ DINING_HALLS = sorted(DINING_URLS.keys())
 
 @app.route("/", methods=["GET"])
 def index():
+    login_next = request.args.get("next", "")
     return render_template(
         "index.html",
         message="",
         halls=DINING_HALLS,
+        csrf_token=get_csrf_token(),
+        is_logged_in="user_id" in session,
+        user_email=session.get("user_email", ""),
+        login_next=login_next,
+    )
+
+@app.route("/login/start", methods=["POST"])
+def login_start():
+    if not validate_csrf():
+        return "Bad Request", 400
+
+    email = request.form.get("email", "").strip().lower()
+    next_url = request.form.get("next", "")
+    if next_url.startswith("/"):
+        session["post_login_redirect"] = next_url
+
+    if not email or not _is_mit_email(email):
+        return render_template(
+            "index.html",
+            message="Please use your @mit.edu email to sign in.",
+            halls=DINING_HALLS,
+            csrf_token=get_csrf_token(),
+            is_logged_in=False,
+            user_email="",
+            login_next=next_url,
+        )
+
+    token = _create_login_token(email)
+    base_url = BASE_URL or request.url_root.rstrip("/")
+    magic_link = f"{base_url}{url_for('magic_login')}?token={token}"
+
+    body_lines = [
+        "MIT Dining Alerts login link",
+        "",
+        "Click to sign in:",
+        magic_link,
+        "",
+        f"This link expires in {MAGIC_TOKEN_TTL_MINUTES} minutes.",
+    ]
+    send_email(email, "Your MIT Dining Alerts sign-in link", "\n".join(body_lines))
+
+    return render_template(
+        "index.html",
+        message="Check your email for a sign-in link.",
+        halls=DINING_HALLS,
+        csrf_token=get_csrf_token(),
+        is_logged_in=False,
+        user_email="",
+        login_next=next_url,
     )
 
 
+@app.route("/auth/magic")
+def magic_login():
+    token = request.args.get("token", "")
+    if not token:
+        return "Invalid login link", 400
+
+    user_id = _consume_login_token(token)
+    if not user_id:
+        return "Login link expired or invalid", 400
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT email FROM users WHERE id = %s", (user_id,))
+            row = cur.fetchone()
+            if not row:
+                return "Invalid login", 400
+            email = row[0]
+
+    session["user_id"] = user_id
+    session["user_email"] = email
+    return redirect(session.pop("post_login_redirect", url_for("index")))
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("index"))
+
+
 @app.route("/subscribe", methods=["POST"])
+@login_required
 def subscribe():
-    email = request.form.get("email", "").strip()
+    if not validate_csrf():
+        return "Bad Request", 400
+
+    email = session.get("user_email", "").strip()
     keywords_str = request.form.get("keywords", "").strip()
     halls_selected = request.form.getlist("halls")
     halls_list = halls_selected or None
@@ -66,16 +235,19 @@ def subscribe():
     if not email or not new_keywords:
         return render_template(
             "index.html",
-            message="Please provide an email and at least one magic word (comma-separated).",
+            message="Please provide at least one magic word (comma-separated).",
             halls=DINING_HALLS,
+            csrf_token=get_csrf_token(),
+            is_logged_in=True,
+            user_email=email,
         )
 
     # Look up existing subscription
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT item_keywords, halls FROM subscriptions WHERE email = %s",
-                (email,),
+                "SELECT item_keywords, halls FROM subscriptions WHERE user_id = %s",
+                (session["user_id"],),
             )
             row = cur.fetchone()
 
@@ -107,9 +279,9 @@ def subscribe():
                     """
                     UPDATE subscriptions
                     SET item_keywords = %s, halls = %s
-                    WHERE email = %s
+                    WHERE user_id = %s
                     """,
-                    (json.dumps(current_keywords), halls_json, email),
+                    (json.dumps(current_keywords), halls_json, session["user_id"]),
                 )
             else:
                 # New subscriber
@@ -118,10 +290,10 @@ def subscribe():
                 cur.execute(
                     """
                     INSERT INTO subscriptions
-                    (email, item_keywords, halls, last_notified_date)
+                    (user_id, item_keywords, halls, last_notified_date)
                     VALUES (%s, %s, %s, NULL)
                     """,
-                    (email, keywords_json, halls_json),
+                    (session["user_id"], keywords_json, halls_json),
                 )
 
                 if SEND_WELCOME:
@@ -147,26 +319,26 @@ def subscribe():
         message=(
             "Subscribed! We’ll watch for dishes matching: "
             f"{', '.join(new_keywords)}. "
-            "(You can add more magic words later with the same email.)"
+            "(You can add more magic words later from this account.)"
         ),
         halls=DINING_HALLS,
+        csrf_token=get_csrf_token(),
+        is_logged_in=True,
+        user_email=email,
     )
 
 
 @app.route("/unsubscribe", methods=["POST"])
+@login_required
 def unsubscribe():
-    email = request.form.get("email", "").strip()
+    if not validate_csrf():
+        return "Bad Request", 400
 
-    if not email:
-        return render_template(
-            "index.html",
-            message="Please provide an email to unsubscribe.",
-            halls=DINING_HALLS,
-        )
+    email = session.get("user_email", "").strip()
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM subscriptions WHERE email = %s", (email,))
+            cur.execute("DELETE FROM subscriptions WHERE user_id = %s", (session["user_id"],))
             affected = cur.rowcount
 
     if affected == 0:
@@ -178,6 +350,9 @@ def unsubscribe():
         "index.html",
         message=msg,
         halls=DINING_HALLS,
+        csrf_token=get_csrf_token(),
+        is_logged_in=True,
+        user_email=email,
     )
 
 
@@ -185,22 +360,23 @@ def unsubscribe():
 
 
 @app.route("/debug/subscriptions")
+@login_required
 def debug_subscriptions():
     """
     Simple HTML table showing all subscriptions.
-    Protected by ?token=ADMIN_DEBUG_TOKEN.
+    Protected by ADMIN_EMAILS allowlist.
     """
-    token = request.args.get("token", "")
-    if not ADMIN_DEBUG_TOKEN or token != ADMIN_DEBUG_TOKEN:
+    if not _is_admin_email(session.get("user_email", "")):
         return "Forbidden", 403
 
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT email, item_keywords, halls, last_notified_date
-                FROM subscriptions
-                ORDER BY email
+                SELECT u.email, s.item_keywords, s.halls, s.last_notified_date
+                FROM subscriptions s
+                JOIN users u ON u.id = s.user_id
+                ORDER BY u.email
                 """
             )
             rows = cur.fetchall()
