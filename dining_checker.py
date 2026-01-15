@@ -4,6 +4,8 @@ import os
 import smtplib
 from email.message import EmailMessage
 from typing import Dict, List, Set
+import re
+import unicodedata
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -47,17 +49,42 @@ def fetch_menu(url: str) -> str:
     return resp.text
 
 
+def _normalize_text(text: str) -> str:
+    # Strip accents, lowercase, and normalize separators to spaces.
+    text = unicodedata.normalize("NFKD", text)
+    text = text.encode("ascii", "ignore").decode("ascii")
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return " ".join(text.split())
+
+
+def _tokenize(text: str) -> list[str]:
+    text = _normalize_text(text)
+    return text.split() if text else []
+
+
+def _contains_sequence(tokens: list[str], phrase_tokens: list[str]) -> bool:
+    if not phrase_tokens:
+        return False
+    if len(phrase_tokens) > len(tokens):
+        return False
+    for i in range(len(tokens) - len(phrase_tokens) + 1):
+        if tokens[i : i + len(phrase_tokens)] == phrase_tokens:
+            return True
+    return False
+
+
 def page_contains_any_keyword(html: str, keywords: list[str]) -> bool:
     """
     Return True if ANY of the keywords appears (case-insensitive)
     in the plain text of the page.
     """
     soup = BeautifulSoup(html, "html.parser")
-    text = soup.get_text(separator=" ").lower()
+    tokens = _tokenize(soup.get_text(separator=" "))
 
     for kw in keywords:
-        kw_clean = kw.strip().lower()
-        if kw_clean and kw_clean in text:
+        kw_tokens = _tokenize(kw)
+        if _contains_sequence(tokens, kw_tokens):
             return True
     return False
 
@@ -140,7 +167,7 @@ def find_keyword_details(
 
         soup = BeautifulSoup(html, "html.parser")
         text = soup.get_text(separator="\n")
-        text_lower = text.lower()
+        text_lower = _normalize_text(text)
 
         # --- Build meal segments heuristically ---
         meal_names = ["breakfast", "lunch", "dinner"]
@@ -162,18 +189,18 @@ def find_keyword_details(
                 else:
                     end_idx = len(text_lower)
                 segment = text_lower[start_idx:end_idx]
-                segments.append((meal.capitalize(), segment))
+                segments.append((meal.capitalize(), _tokenize(segment)))
         else:
             # No explicit meal markers found; treat entire text as one segment
-            segments.append(("(unspecified meal)", text_lower))
+            segments.append(("(unspecified meal)", _tokenize(text_lower)))
 
         hall_matches: Dict[str, Set[str]] = {}
 
         # For each segment and each keyword, see where it appears
-        for meal_label, seg in segments:
+        for meal_label, seg_tokens in segments:
             for kw in kw_list:
-                kw_l = kw.lower()
-                if kw_l in seg:
+                kw_tokens = _tokenize(kw)
+                if _contains_sequence(seg_tokens, kw_tokens):
                     if kw not in hall_matches:
                         hall_matches[kw] = set()
                     hall_matches[kw].add(meal_label)
