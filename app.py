@@ -279,27 +279,33 @@ def login_start():
     )
 
 
-@app.route("/auth/magic")
+@app.route("/auth/magic", methods=["GET", "POST"])
 def magic_login():
+    if request.method == "POST":
+        token = request.form.get("token", "")
+        if not token:
+            return "Invalid login link", 400
+
+        user_id = _consume_login_token(token)
+        if not user_id:
+            return "Login link expired or invalid", 400
+
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT email FROM users WHERE id = %s", (user_id,))
+                row = cur.fetchone()
+                if not row:
+                    return "Invalid login", 400
+                email = row[0]
+
+        session["user_id"] = user_id
+        session["user_email"] = email
+        return redirect(session.pop("post_login_redirect", url_for("index")))
+
     token = request.args.get("token", "")
     if not token:
         return "Invalid login link", 400
-
-    user_id = _consume_login_token(token)
-    if not user_id:
-        return "Login link expired or invalid", 400
-
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT email FROM users WHERE id = %s", (user_id,))
-            row = cur.fetchone()
-            if not row:
-                return "Invalid login", 400
-            email = row[0]
-
-    session["user_id"] = user_id
-    session["user_email"] = email
-    return redirect(session.pop("post_login_redirect", url_for("index")))
+    return render_template("magic_login.html", token=token)
 
 
 @app.route("/logout")
