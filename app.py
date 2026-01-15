@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 from functools import wraps
 from dotenv import load_dotenv
 from db import get_conn, ensure_schema
-from dining_checker import DINING_URLS, send_email
+from dining_checker import DINING_URLS, find_keyword_details, send_email
 
 
 load_dotenv()
@@ -138,6 +138,37 @@ def _consume_login_token(token: str):
     return row[0] if row else None
 
 
+def _get_subscription(user_id: int):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT item_keywords, halls, last_notified_date
+                FROM subscriptions
+                WHERE user_id = %s
+                """,
+                (user_id,),
+            )
+            row = cur.fetchone()
+    if not row:
+        return None
+
+    kw_json, halls_json, last_notified = row
+    try:
+        keywords = json.loads(kw_json) if kw_json else []
+    except Exception:
+        keywords = []
+    try:
+        halls = json.loads(halls_json) if halls_json else []
+    except Exception:
+        halls = []
+    return {
+        "keywords": keywords,
+        "halls": halls,
+        "last_notified": last_notified,
+    }
+
+
 # Run once at import time so gunicorn + local both get the table.
 ensure_schema()
 
@@ -157,6 +188,7 @@ def index():
         csrf_token=get_csrf_token(),
         is_logged_in="user_id" in session,
         user_email=session.get("user_email", ""),
+        profile_url=url_for("profile"),
         login_next=login_next,
     )
 
@@ -256,6 +288,26 @@ def magic_login():
 def logout():
     session.clear()
     return redirect(url_for("index"))
+
+
+@app.route("/profile", methods=["GET"])
+@login_required
+def profile():
+    subscription = _get_subscription(session["user_id"])
+    matches = None
+    if subscription and subscription["keywords"]:
+        try:
+            halls_filter = subscription["halls"] or None
+            matches = find_keyword_details(subscription["keywords"], halls_filter=halls_filter)
+        except Exception as e:
+            print(f"[WARN] Failed to load menu matches for profile: {e}")
+    return render_template(
+        "profile.html",
+        subscription=subscription,
+        matches=matches,
+        user_email=session.get("user_email", ""),
+        profile_url=url_for("profile"),
+    )
 
 
 @app.route("/subscribe", methods=["POST"])
