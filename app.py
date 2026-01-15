@@ -71,7 +71,7 @@ def _upsert_user_by_email(email: str) -> int:
             cur.execute("SELECT id, oidc_sub FROM users WHERE email = %s", (email,))
             row = cur.fetchone()
             if row:
-                return user_id
+                return row[0]
 
             cur.execute(
                 "INSERT INTO users (email) VALUES (%s) RETURNING id",
@@ -100,6 +100,23 @@ def _create_login_token(email: str) -> str:
                 (token_hash, user_id, expires_at),
             )
     return token
+
+
+def _is_rate_limited(email: str) -> bool:
+    window_start = datetime.utcnow() - timedelta(minutes=10)
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*)
+                FROM login_tokens lt
+                JOIN users u ON u.id = lt.user_id
+                WHERE u.email = %s AND lt.created_at >= %s
+                """,
+                (email, window_start),
+            )
+            count = cur.fetchone()[0]
+    return count >= 3
 
 
 def _consume_login_token(token: str):
@@ -164,6 +181,17 @@ def login_start():
             login_next=next_url,
         )
 
+    if _is_rate_limited(email):
+        return render_template(
+            "index.html",
+            message="Too many login links requested. Try again in a few minutes.",
+            halls=DINING_HALLS,
+            csrf_token=get_csrf_token(),
+            is_logged_in=False,
+            user_email="",
+            login_next=next_url,
+        )
+
     token = _create_login_token(email)
     base_url = BASE_URL or request.url_root.rstrip("/")
     magic_link = f"{base_url}{url_for('magic_login')}?token={token}"
@@ -176,7 +204,19 @@ def login_start():
         "",
         f"This link expires in {MAGIC_TOKEN_TTL_MINUTES} minutes.",
     ]
-    send_email(email, "Your MIT Dining Alerts sign-in link", "\n".join(body_lines))
+    try:
+        send_email(email, "Your MIT Dining Alerts sign-in link", "\n".join(body_lines))
+    except Exception as e:
+        print(f"[WARN] Failed to send login link to {email}: {e}")
+        return render_template(
+            "index.html",
+            message="We couldn’t send the login email. Please try again later.",
+            halls=DINING_HALLS,
+            csrf_token=get_csrf_token(),
+            is_logged_in=False,
+            user_email="",
+            login_next=next_url,
+        )
 
     return render_template(
         "index.html",
