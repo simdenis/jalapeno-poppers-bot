@@ -5,7 +5,7 @@ import json
 from datetime import date
 from dotenv import load_dotenv
 
-from db import yessy, ensure_schema
+from db import get_conn, ensure_schema
 from dining_checker import find_keyword_details, send_email
 load_dotenv()
 DEBUG_ALWAYS_NOTIFY = os.getenv("DEBUG_ALWAYS_NOTIFY", "false").lower() == "true"
