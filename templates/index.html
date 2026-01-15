@@ -312,6 +312,53 @@
     </div>
   </div>
 
+  <div class="row justify-content-center mt-4">
+    <div class="col-lg-8">
+      <div class="card p-3">
+        <div class="d-flex flex-wrap align-items-center justify-content-between mb-2">
+          <div class="text-uppercase small text-muted">Community stats</div>
+          <a class="small text-decoration-none" href="{{ url_for('stats') }}">View full stats</a>
+        </div>
+        <div class="row text-center g-3">
+          <div class="col-12 col-md-4">
+            <div class="fw-semibold">{{ total_subscriptions }}</div>
+            <div class="text-muted small">Subscribers</div>
+          </div>
+          <div class="col-12 col-md-4">
+            <div class="text-muted small mb-1">Top magic words</div>
+            <table class="table table-sm mb-0">
+              <tbody>
+              {% for word, count in top_keywords %}
+                <tr>
+                  <td class="text-start">{{ word }}</td>
+                  <td class="text-end text-muted">{{ count }}</td>
+                </tr>
+              {% else %}
+                <tr><td class="text-muted">No data yet.</td><td></td></tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="col-12 col-md-4">
+            <div class="text-muted small mb-1">Top halls</div>
+            <table class="table table-sm mb-0">
+              <tbody>
+              {% for hall, count in top_halls %}
+                <tr>
+                  <td class="text-start">{{ hall }}</td>
+                  <td class="text-end text-muted">{{ count }}</td>
+                </tr>
+              {% else %}
+                <tr><td class="text-muted">No data yet.</td><td></td></tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <footer class="text-center">
     <small>
       Built with excessive love for jalapeño poppers. One row per email, many magic words. Hi, I’m Denis 👋

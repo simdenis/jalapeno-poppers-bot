@@ -200,6 +200,29 @@ DINING_HALLS = sorted(DINING_URLS.keys())
 @app.route("/", methods=["GET"])
 def index():
     login_next = request.args.get("next", "")
+    keyword_counts = Counter()
+    hall_counts = Counter()
+    total_subscriptions = 0
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT item_keywords, halls FROM subscriptions")
+            rows = cur.fetchall()
+
+    for kw_json, halls_json in rows:
+        total_subscriptions += 1
+        try:
+            keywords = json.loads(kw_json) if kw_json else []
+        except Exception:
+            keywords = []
+        try:
+            halls = json.loads(halls_json) if halls_json else []
+        except Exception:
+            halls = []
+
+        keyword_counts.update([k for k in keywords if k])
+        hall_counts.update([h for h in halls if h])
+
     return render_template(
         "index.html",
         message="",
@@ -208,6 +231,9 @@ def index():
         is_logged_in="user_id" in session,
         user_email=session.get("user_email", ""),
         profile_url=url_for("profile"),
+        total_subscriptions=total_subscriptions,
+        top_keywords=keyword_counts.most_common(5),
+        top_halls=hall_counts.most_common(5),
         login_next=login_next,
     )
 
