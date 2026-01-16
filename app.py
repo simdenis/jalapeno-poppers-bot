@@ -8,7 +8,14 @@ from functools import wraps
 from collections import Counter
 from dotenv import load_dotenv
 from db import get_conn, ensure_schema
-from dining_checker import DINING_URLS, find_keyword_details, find_keyword_snippets, send_email
+from dining_checker import (
+    DINING_URLS,
+    _extract_items_by_meal,
+    fetch_menu,
+    find_keyword_details,
+    find_keyword_snippets,
+    send_email,
+)
 
 
 load_dotenv()
@@ -543,6 +550,36 @@ def stats():
         keyword_counts=keyword_counts.most_common(20),
         hall_counts=hall_counts.most_common(10),
     )
+
+
+@app.route("/debug/menu", methods=["GET"])
+@login_required
+def debug_menu():
+    if not _is_admin_email(session.get("user_email", "")):
+        return "Forbidden", 403
+
+    hall = request.args.get("hall", "")
+    if not hall or hall not in DINING_URLS:
+        hall_list = "".join(f"<li>{h}</li>" for h in DINING_URLS.keys())
+        return (
+            "<h1>Menu debug</h1>"
+            "<p>Provide ?hall=Hall%20Name</p>"
+            f"<ul>{hall_list}</ul>"
+        )
+
+    try:
+        html = fetch_menu(hall, DINING_URLS[hall])
+    except Exception as e:
+        return f"Failed to fetch menu for {hall}: {e}", 500
+    if not html:
+        return f"No menu data for {hall}", 500
+
+    items_by_meal = _extract_items_by_meal(html)
+    sections = []
+    for meal, items in items_by_meal.items():
+        items_html = "".join(f"<li>{item}</li>" for item in items[:30])
+        sections.append(f"<h2>{meal}</h2><ul>{items_html}</ul>")
+    return "<h1>Menu debug</h1>" + "".join(sections)
 
 
 @app.route("/subscribe", methods=["POST"])
