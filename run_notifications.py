@@ -115,7 +115,7 @@ def main():
             continue
 
         lines = [
-            f"Dining alerts for {today.isoformat()}",
+            f"MIT Dining Alerts — {today.isoformat()}",
             "",
             f"Magic words: {', '.join(keywords)}",
             "",
@@ -139,19 +139,45 @@ def main():
 
 
         unsubscribe_token = _create_unsubscribe_token_for_email(email)
+        unsubscribe_link = (
+            f"{BASE_URL}/unsubscribe/confirm?token={unsubscribe_token}"
+            if unsubscribe_token
+            else None
+        )
         if unsubscribe_token:
             lines.extend(
                 [
                     "",
                     "Unsubscribe:",
-                    f"{BASE_URL}/unsubscribe/confirm?token={unsubscribe_token}",
+                    unsubscribe_link,
                 ]
             )
 
         body = "\n".join(lines)
-        subject = "MIT Dining Alerts 🌶️"
+        subject = "MIT Dining Alerts — today’s matches"
+        html_lines = []
+        html_lines.append("<div style=\"font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', Arial, sans-serif; line-height: 1.5;\">")
+        html_lines.append(f"<h2 style=\"margin: 0 0 8px;\">MIT Dining Alerts — {today.isoformat()}</h2>")
+        html_lines.append(f"<p style=\"margin: 0 0 12px; color: #6b7280;\">Magic words: {', '.join(keywords)}</p>")
+        html_lines.append("<div>")
+        for hall_name in sorted(details.keys()):
+            hall_data = details[hall_name]
+            html_lines.append(f"<h3 style=\"margin: 12px 0 6px;\">{hall_name}</h3>")
+            html_lines.append("<ul style=\"margin: 0 0 8px; padding-left: 18px;\">")
+            for kw in sorted(hall_data.keys()):
+                meals = sorted(hall_data[kw])
+                meal_str = ", ".join(meals)
+                html_lines.append(f"<li><strong>{kw}</strong> — {meal_str}</li>")
+            html_lines.append("</ul>")
+        html_lines.append("</div>")
+        if unsubscribe_link:
+            html_lines.append(
+                f"<p style=\"margin: 16px 0 0;\">Unsubscribe: <a href=\"{unsubscribe_link}\">{unsubscribe_link}</a></p>"
+            )
+        html_lines.append("</div>")
+        html_body = "".join(html_lines)
 
-        send_email(email, subject, body)
+        send_email(email, subject, body, html_body=html_body)
 
         # Mark as notified today
         update_last_notified(email, today)

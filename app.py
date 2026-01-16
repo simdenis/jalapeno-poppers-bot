@@ -320,15 +320,31 @@ def login_start():
     magic_link = f"{base_url}{url_for('magic_login')}?token={token}"
 
     body_lines = [
-        "MIT Dining Alerts login link",
+        "Your MIT Dining Alerts sign-in link",
         "",
-        "Click to sign in:",
         magic_link,
         "",
         f"This link expires in {MAGIC_TOKEN_TTL_MINUTES} minutes.",
     ]
+    html_body = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', Arial, sans-serif; line-height: 1.5;">
+      <h2 style="margin: 0 0 8px;">Sign in to MIT Dining Alerts</h2>
+      <p style="margin: 0 0 16px;">Click below to finish signing in:</p>
+      <p style="margin: 0 0 20px;">
+        <a href="{magic_link}" style="display: inline-block; padding: 10px 16px; background: #f97316; color: #fff; text-decoration: none; border-radius: 999px;">
+          Sign in
+        </a>
+      </p>
+      <p style="margin: 0; color: #6b7280;">This link expires in {MAGIC_TOKEN_TTL_MINUTES} minutes.</p>
+    </div>
+    """
     try:
-        send_email(email, "Your MIT Dining Alerts sign-in link", "\n".join(body_lines))
+        send_email(
+            email,
+            "MIT Dining Alerts — sign in",
+            "\n".join(body_lines),
+            html_body=html_body,
+        )
     except Exception as e:
         print(f"[WARN] Failed to send login link to {email}: {e}")
         return render_template(
@@ -615,12 +631,23 @@ def subscribe():
                             "We'll email you when your magic words show up on the dining menus:",
                             f"  • {', '.join(new_keywords)}",
                             "",
-                            "You can update your magic words or unsubscribe any time from the site.",
+                            "Manage your alerts any time from the site.",
                         ]
+                        html_body = f"""
+                        <div style="font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', Arial, sans-serif; line-height: 1.5;">
+                          <h2 style="margin: 0 0 8px;">Welcome to MIT Dining Alerts 🌶️</h2>
+                          <p style="margin: 0 0 12px;">We’ll email you when your magic words appear:</p>
+                          <ul style="margin: 0 0 16px; padding-left: 18px;">
+                            <li>{', '.join(new_keywords)}</li>
+                          </ul>
+                          <p style="margin: 0;">Manage your alerts any time from the site.</p>
+                        </div>
+                        """
                         send_email(
                             email,
                             "Welcome to MIT Dining Alerts 🌶️",
                             "\n".join(body_lines),
+                            html_body=html_body,
                         )
                     except Exception as e:
                         print(f"[WARN] Failed to send welcome email to {email}: {e}")

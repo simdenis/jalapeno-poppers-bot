@@ -306,7 +306,7 @@ def find_keyword_details(
 # Email sending
 # ----------------------------
 
-def send_email(to_email: str, subject: str, body: str) -> None:
+def send_email(to_email: str, subject: str, body: str, html_body: str | None = None) -> None:
     """
     Send a UTF-8 email using Gmail SMTP and an app password.
     """
@@ -318,6 +318,8 @@ def send_email(to_email: str, subject: str, body: str) -> None:
     msg["To"] = to_email
     msg["Subject"] = subject
     msg.set_content(body)  # UTF-8 by default
+    if html_body:
+        msg.add_alternative(html_body, subtype="html")
 
     with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT, timeout=5) as server:
         server.ehlo()
