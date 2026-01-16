@@ -5,7 +5,7 @@ Get an email when your favorite foods (your “magic words”) appear on MIT din
 - Flask web app with MIT-only magic-link login to manage subscriptions.
 - PostgreSQL stores users (email) and one subscription per user.
 - GitHub Actions runs `run_notifications.py` daily:
-  - Pulls menus from the Bon Appétit legacy JSON API.
+  - Scrapes menus from Bon Appétit legacy weekly menu pages.
   - Checks each subscriber’s magic words.
   - Sends at most one alert email per day if any match.
 - Fly.io hosts the web app; Neon hosts Postgres.

@@ -54,7 +54,7 @@ EMAIL_PORT = int(_email_port_str)
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 MENU_CACHE_ENABLED = os.getenv("MENU_CACHE_ENABLED", "true").lower() == "true"
-MENU_API_BASE = "http://legacy.cafebonappetit.com/api/2/menus"
+MENU_WEEKLY_BASE = "https://legacy.cafebonappetit.com/weekly-menu"
 
 
 # ----------------------------
@@ -89,8 +89,8 @@ def _set_cached_menu(hall: str, menu_date: date, payload: str) -> None:
             )
 
 
-def fetch_menu(hall: str, url: str) -> dict | None:
-    """Fetch JSON menu for a dining hall via legacy Bon Appetit API."""
+def fetch_menu(hall: str, url: str) -> str | None:
+    """Fetch weekly menu HTML for a dining hall."""
     cafe_id = DINING_CAFE_IDS.get(hall)
     if not cafe_id:
         print(f"[WARN] Missing cafe id for {hall}")
@@ -100,24 +100,18 @@ def fetch_menu(hall: str, url: str) -> dict | None:
     if MENU_CACHE_ENABLED:
         cached = _get_cached_menu(hall, today)
         if cached:
-            try:
-                return json.loads(cached)
-            except Exception:
-                pass
+            return cached
+    weekly_url = f"{MENU_WEEKLY_BASE}/{cafe_id}"
     resp = requests.get(
-        MENU_API_BASE,
-        params={"cafe": cafe_id, "date": today.isoformat()},
-        headers={
-            "Host": "legacy.cafebonappetit.com",
-            "User-Agent": "jalapeno-poppers/1.0",
-        },
+        weekly_url,
+        headers={"User-Agent": "jalapeno-poppers/1.0"},
         timeout=15,
     )
     resp.raise_for_status()
-    data = resp.json()
+    html = resp.text
     if MENU_CACHE_ENABLED:
-        _set_cached_menu(hall, today, json.dumps(data))
-    return data
+        _set_cached_menu(hall, today, html)
+    return html
 
 
 def _normalize_text(text: str) -> str:
@@ -160,26 +154,45 @@ def page_contains_any_keyword(html: str, keywords: list[str]) -> bool:
     return False
 
 
-def _extract_items_by_meal(data: dict) -> dict[str, list[str]]:
+def _extract_items_by_meal(html: str) -> dict[str, list[str]]:
     """
-    Extract item labels grouped by meal/daypart from Bon Appetit menu JSON.
+    Extract item labels grouped by meal/daypart from weekly-menu HTML.
     """
+    soup = BeautifulSoup(html, "html.parser")
+    meal_labels = {"breakfast", "brunch", "lunch", "dinner"}
     items_by_meal: dict[str, list[str]] = {}
-    days = data.get("days") or []
-    for day in days:
-        cafes = day.get("cafes") or {}
-        for cafe in cafes.values():
-            dayparts = cafe.get("dayparts") or []
-            for daypart in dayparts:
-                meal_label = daypart.get("label") or "Unspecified"
-                stations = daypart.get("stations") or []
-                for station in stations:
-                    items = station.get("items") or []
-                    for item in items:
-                        label = item.get("label") or item.get("name")
-                        if not label:
-                            continue
-                        items_by_meal.setdefault(meal_label, []).append(label)
+
+    item_selectors = [
+        "[data-menu-item]",
+        "[data-item-name]",
+        ".menu-item",
+        ".menu-item-name",
+        ".menu-item-title",
+        ".menu__item",
+        ".menu__item-name",
+        ".item-name",
+    ]
+    item_elements = []
+    for selector in item_selectors:
+        item_elements.extend(soup.select(selector))
+
+    if not item_elements:
+        item_elements = soup.select("li")
+
+    for elem in item_elements:
+        text = elem.get_text(" ", strip=True)
+        if not text or len(text) > 120:
+            continue
+        prev_heading = elem.find_previous(["h1", "h2", "h3", "h4", "h5"])
+        meal = "Unspecified"
+        if prev_heading:
+            heading_text = prev_heading.get_text(" ", strip=True).lower()
+            for label in meal_labels:
+                if label in heading_text:
+                    meal = label.capitalize()
+                    break
+        items_by_meal.setdefault(meal, []).append(text)
+
     return items_by_meal
 
 
@@ -226,13 +239,13 @@ def find_keyword_snippets(
         if hall not in allowed_halls:
             continue
         try:
-            data = fetch_menu(hall, url)
+            html = fetch_menu(hall, url)
         except Exception as e:
             print(f"[WARN] Failed to fetch menu for {hall}: {e}")
             continue
-        if not data:
+        if not html:
             continue
-        items_by_meal = _extract_items_by_meal(data)
+        items_by_meal = _extract_items_by_meal(html)
         snippets: list[str] = []
         for items in items_by_meal.values():
             for item in items:
@@ -275,10 +288,10 @@ def find_item_locations(keywords: list[str], halls_filter = None) -> list[str]:
             continue
 
         try:
-            data = fetch_menu(hall, url)
-            if not data:
+            html = fetch_menu(hall, url)
+            if not html:
                 continue
-            items_by_meal = _extract_items_by_meal(data)
+            items_by_meal = _extract_items_by_meal(html)
             if _find_keyword_details_from_items(items_by_meal, keywords):
                 hits.append(hall)
         except Exception as e:
@@ -329,14 +342,14 @@ def find_keyword_details(
             continue
 
         try:
-            data = fetch_menu(hall, url)
+            html = fetch_menu(hall, url)
         except Exception as e:
             print(f"[WARN] Failed to fetch menu for {hall}: {e}")
             continue
-        if not data:
+        if not html:
             continue
 
-        items_by_meal = _extract_items_by_meal(data)
+        items_by_meal = _extract_items_by_meal(html)
         hall_matches = _find_keyword_details_from_items(items_by_meal, kw_list)
 
         if hall_matches:
