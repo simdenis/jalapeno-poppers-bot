@@ -89,29 +89,35 @@ def _set_cached_menu(hall: str, menu_date: date, payload: str) -> None:
             )
 
 
-def fetch_menu(hall: str, url: str) -> str | None:
-    """Fetch weekly menu HTML for a dining hall."""
+def fetch_menu_for_date(hall: str, menu_date: date) -> str | None:
+    """Fetch menu HTML for a given date from the weekly-menu page."""
     cafe_id = DINING_CAFE_IDS.get(hall)
     if not cafe_id:
         print(f"[WARN] Missing cafe id for {hall}")
         return None
 
-    today = date.today()
     if MENU_CACHE_ENABLED:
-        cached = _get_cached_menu(hall, today)
+        cached = _get_cached_menu(hall, menu_date)
         if cached:
             return cached
+
     weekly_url = f"{MENU_WEEKLY_BASE}/{cafe_id}"
     resp = requests.get(
         weekly_url,
+        params={"date": menu_date.isoformat()},
         headers={"User-Agent": "jalapeno-poppers/1.0"},
         timeout=15,
     )
     resp.raise_for_status()
     html = resp.text
     if MENU_CACHE_ENABLED:
-        _set_cached_menu(hall, today, html)
+        _set_cached_menu(hall, menu_date, html)
     return html
+
+
+def fetch_menu(hall: str, url: str) -> str | None:
+    """Fetch menu HTML for today."""
+    return fetch_menu_for_date(hall, date.today())
 
 
 def _normalize_text(text: str) -> str:
@@ -218,9 +224,8 @@ def _extract_items_by_meal(html: str) -> dict[str, list[str]]:
     """
     soup = BeautifulSoup(html, "html.parser")
 
-    def _find_today_container():
-        today = date.today()
-        iso = today.isoformat()
+    def _find_today_container(target_date: date):
+        iso = target_date.isoformat()
         candidates = []
         for elem in soup.find_all(attrs={"data-date": True}):
             if iso in elem.get("data-date", ""):
@@ -235,10 +240,10 @@ def _extract_items_by_meal(html: str) -> dict[str, list[str]]:
             return candidates[0]
 
         label_variants = {
-            today.strftime("%b %d"),
-            today.strftime("%B %d"),
-            today.strftime("%a, %b %d"),
-            today.strftime("%A, %b %d"),
+            target_date.strftime("%b %d"),
+            target_date.strftime("%B %d"),
+            target_date.strftime("%a, %b %d"),
+            target_date.strftime("%A, %b %d"),
             "Today",
         }
         for elem in soup.find_all(["section", "div", "article"]):
@@ -311,9 +316,14 @@ def _extract_items_by_meal(html: str) -> dict[str, list[str]]:
             if any(items.values()):
                 return items
 
-    today_container = _find_today_container()
+    today_container = _find_today_container(date.today())
     root = today_container if today_container is not None else soup
     return _extract_items_by_meal_from_root(root)
+
+
+def extract_items_all(html: str) -> dict[str, list[str]]:
+    soup = BeautifulSoup(html, "html.parser")
+    return _extract_items_by_meal_from_root(soup)
 
 
 def extract_week_by_day(html: str) -> dict[str, dict[str, list[str]]]:

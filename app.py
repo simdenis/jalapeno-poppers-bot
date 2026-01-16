@@ -11,8 +11,9 @@ from db import get_conn, ensure_schema
 from dining_checker import (
     DINING_URLS,
     _extract_items_by_meal,
-    extract_week_by_day,
+    extract_items_all,
     fetch_menu,
+    fetch_menu_for_date,
     find_keyword_details,
     find_keyword_snippets,
     send_email,
@@ -605,10 +606,15 @@ def debug_menu_week():
     if not html:
         return f"No menu data for {hall}", 500
 
-    week = extract_week_by_day(html)
     sections = []
-    for day_label, items_by_meal in week.items():
-        sections.append(f"<h2>{day_label}</h2>")
+    from datetime import date, timedelta
+    for offset in range(0, 7):
+        day = date.today() + timedelta(days=offset)
+        html_day = fetch_menu_for_date(hall, day)
+        if not html_day:
+            continue
+        items_by_meal = extract_items_all(html_day)
+        sections.append(f"<h2>{day.isoformat()}</h2>")
         for meal, items in items_by_meal.items():
             items_html = "".join(f"<li>{item}</li>" for item in items[:20])
             sections.append(f"<h3>{meal}</h3><ul>{items_html}</ul>")
