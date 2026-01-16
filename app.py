@@ -11,9 +11,7 @@ from db import get_conn, ensure_schema
 from dining_checker import (
     DINING_URLS,
     _extract_items_by_meal,
-    extract_items_all,
     fetch_menu,
-    fetch_menu_for_date,
     find_keyword_details,
     find_keyword_snippets,
     send_email,
@@ -584,41 +582,6 @@ def debug_menu():
     return "<h1>Menu debug</h1>" + "".join(sections)
 
 
-@app.route("/debug/menu-week", methods=["GET"])
-@login_required
-def debug_menu_week():
-    if not _is_admin_email(session.get("user_email", "")):
-        return "Forbidden", 403
-
-    hall = request.args.get("hall", "")
-    if not hall or hall not in DINING_URLS:
-        hall_list = "".join(f"<li>{h}</li>" for h in DINING_URLS.keys())
-        return (
-            "<h1>Menu week debug</h1>"
-            "<p>Provide ?hall=Hall%20Name</p>"
-            f"<ul>{hall_list}</ul>"
-        )
-
-    try:
-        html = fetch_menu(hall, DINING_URLS[hall])
-    except Exception as e:
-        return f"Failed to fetch menu for {hall}: {e}", 500
-    if not html:
-        return f"No menu data for {hall}", 500
-
-    sections = []
-    from datetime import date, timedelta
-    for offset in range(0, 7):
-        day = date.today() + timedelta(days=offset)
-        html_day = fetch_menu_for_date(hall, day)
-        if not html_day:
-            continue
-        items_by_meal = extract_items_all(html_day)
-        sections.append(f"<h2>{day.isoformat()}</h2>")
-        for meal, items in items_by_meal.items():
-            items_html = "".join(f"<li>{item}</li>" for item in items[:20])
-            sections.append(f"<h3>{meal}</h3><ul>{items_html}</ul>")
-    return "<h1>Menu week debug</h1>" + "".join(sections)
 
 
 @app.route("/subscribe", methods=["POST"])

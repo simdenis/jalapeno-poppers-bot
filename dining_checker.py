@@ -26,20 +26,6 @@ DINING_URLS = {
     "McCormick": "http://mit.cafebonappetit.com/cafe/mccormick/",
     "Next House": "http://mit.cafebonappetit.com/cafe/next/",
 }
-DINING_CAFE_IDS = {
-    "Simmons Hall": None,
-    "Maseeh Hall": None,
-    "New Vassar": None,
-    "Baker House": None,
-    "McCormick": None,
-    "Next House": None,
-}
-_cafe_ids_env = os.getenv("DINING_CAFE_IDS_JSON")
-if _cafe_ids_env:
-    try:
-        DINING_CAFE_IDS.update(json.loads(_cafe_ids_env))
-    except Exception:
-        print("[WARN] Failed to parse DINING_CAFE_IDS_JSON")
 
 
 # ----------------------------
@@ -54,7 +40,6 @@ EMAIL_PORT = int(_email_port_str)
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 MENU_CACHE_ENABLED = os.getenv("MENU_CACHE_ENABLED", "true").lower() == "true"
-MENU_WEEKLY_BASE = "https://legacy.cafebonappetit.com/weekly-menu"
 
 
 # ----------------------------
@@ -89,35 +74,24 @@ def _set_cached_menu(hall: str, menu_date: date, payload: str) -> None:
             )
 
 
-def fetch_menu_for_date(hall: str, menu_date: date) -> str | None:
-    """Fetch menu HTML for a given date from the weekly-menu page."""
-    cafe_id = DINING_CAFE_IDS.get(hall)
-    if not cafe_id:
-        print(f"[WARN] Missing cafe id for {hall}")
-        return None
-
+def fetch_menu(hall: str, url: str) -> str | None:
+    """Fetch menu HTML for today from the MIT cafe page."""
+    today = date.today()
     if MENU_CACHE_ENABLED:
-        cached = _get_cached_menu(hall, menu_date)
+        cached = _get_cached_menu(hall, today)
         if cached:
             return cached
 
-    weekly_url = f"{MENU_WEEKLY_BASE}/{cafe_id}"
     resp = requests.get(
-        weekly_url,
-        params={"date": menu_date.isoformat()},
+        url,
         headers={"User-Agent": "jalapeno-poppers/1.0"},
         timeout=15,
     )
     resp.raise_for_status()
     html = resp.text
     if MENU_CACHE_ENABLED:
-        _set_cached_menu(hall, menu_date, html)
+        _set_cached_menu(hall, today, html)
     return html
-
-
-def fetch_menu(hall: str, url: str) -> str | None:
-    """Fetch menu HTML for today."""
-    return fetch_menu_for_date(hall, date.today())
 
 
 def _normalize_text(text: str) -> str:
@@ -321,9 +295,6 @@ def _extract_items_by_meal(html: str) -> dict[str, list[str]]:
     return _extract_items_by_meal_from_root(root)
 
 
-def extract_items_all(html: str) -> dict[str, list[str]]:
-    soup = BeautifulSoup(html, "html.parser")
-    return _extract_items_by_meal_from_root(soup)
 
 
 def extract_week_by_day(html: str) -> dict[str, dict[str, list[str]]]:
@@ -395,9 +366,13 @@ def find_keyword_snippets(
             continue
         if not html:
             continue
-        items_by_meal = extract_items_all(html)
+        items_by_meal = _extract_items_by_meal(html)
         if not any(items_by_meal.values()):
-            items_by_meal = _extract_items_by_meal(html)
+            # Fallback: scan lines if menu items aren't detected
+            soup = BeautifulSoup(html, "html.parser")
+            lines = [ln.strip() for ln in soup.get_text(separator="\n").splitlines()]
+            lines = [ln for ln in lines if ln]
+            items_by_meal = {"Unspecified": lines}
         snippets: list[str] = []
         for items in items_by_meal.values():
             for item in items:

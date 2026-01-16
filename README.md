@@ -5,7 +5,7 @@ Get an email when your favorite foods (your “magic words”) appear on MIT din
 - Flask web app with MIT-only magic-link login to manage subscriptions.
 - PostgreSQL stores users (email) and one subscription per user.
 - GitHub Actions runs `run_notifications.py` daily:
-  - Scrapes menus from Bon Appétit legacy weekly menu pages.
+  - Scrapes menus from MIT Bon Appétit cafe pages.
   - Checks each subscriber’s magic words.
   - Sends at most one alert email per day if any match.
 - Fly.io hosts the web app; Neon hosts Postgres.
@@ -94,8 +94,7 @@ Optional:
 - `LOGIN_RATE_LIMIT_WINDOW_MINUTES` (default `10`)
 - `LOGIN_RATE_LIMIT_MAX` (default `3`)
 - `UNSUBSCRIBE_TOKEN_TTL_DAYS` (default `30`)
-- `MENU_CACHE_ENABLED` (`true`/`false`, default `true`)
-- `DINING_CAFE_IDS_JSON` (JSON map of hall name -> cafe id)
+ - `MENU_CACHE_ENABLED` (`true`/`false`, default `true`)
 
 ## Auth behavior
 
@@ -113,9 +112,7 @@ Optional:
 ## Adapting for other universities
 
 1) Update `DINING_URLS` in `dining_checker.py` to the dining hall URLs.
-2) Set `DINING_CAFE_IDS_JSON` with your hall -> cafe id mapping
-   (from the Bon Appétit legacy menu links).
-3) Update the email domain allowlist in `app.py`:
-   - Replace `MIT_EMAIL_DOMAIN` with your domain (e.g., `example.edu`).
-4) Adjust login messaging in templates if needed.
-5) Update branding in `templates/index.html` and `templates/profile.html`.
+2) Update the email domain allowlist in `app.py`:
+    - Replace `MIT_EMAIL_DOMAIN` with your domain (e.g., `example.edu`).
+3) Adjust login messaging in templates if needed.
+4) Update branding in `templates/index.html` and `templates/profile.html`.
