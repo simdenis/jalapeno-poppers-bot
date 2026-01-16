@@ -1,6 +1,6 @@
 Flask
-python-dotenv
+dotenv
 requests
 beautifulsoup4
 gunicorn
-psycopg[binary]
+psycopg2-binary
