@@ -162,6 +162,37 @@ def _extract_items_by_meal(html: str) -> dict[str, list[str]]:
     meal_labels = {"breakfast", "brunch", "lunch", "dinner"}
     items_by_meal: dict[str, list[str]] = {}
 
+    def _find_today_container():
+        today = date.today()
+        iso = today.isoformat()
+        candidates = []
+        for elem in soup.find_all(attrs={"data-date": True}):
+            if iso in elem.get("data-date", ""):
+                candidates.append(elem)
+        if candidates:
+            return candidates[0]
+
+        for elem in soup.find_all(attrs={"data-day": True}):
+            if iso in elem.get("data-day", ""):
+                candidates.append(elem)
+        if candidates:
+            return candidates[0]
+
+        label_variants = {
+            today.strftime("%b %d"),
+            today.strftime("%B %d"),
+            today.strftime("%a, %b %d"),
+            today.strftime("%A, %b %d"),
+            "Today",
+        }
+        for elem in soup.find_all(["section", "div", "article"]):
+            text = elem.get_text(" ", strip=True)
+            if any(label in text for label in label_variants):
+                return elem
+        return None
+
+    today_container = _find_today_container()
+
     # First try embedded JSON states (some pages render menu data via JS).
     def _extract_items_from_json(obj) -> dict[str, list[str]]:
         items: dict[str, list[str]] = {}
@@ -229,6 +260,8 @@ def _extract_items_by_meal(html: str) -> dict[str, list[str]]:
             if any(items.values()):
                 return items
 
+    root = today_container if today_container is not None else soup
+
     item_selectors = [
         "[data-menu-item]",
         "[data-item-name]",
@@ -241,10 +274,10 @@ def _extract_items_by_meal(html: str) -> dict[str, list[str]]:
     ]
     item_elements = []
     for selector in item_selectors:
-        item_elements.extend(soup.select(selector))
+        item_elements.extend(root.select(selector))
 
     if not item_elements:
-        item_elements = soup.select("li")
+        item_elements = root.select("li")
 
     for elem in item_elements:
         text = elem.get_text(" ", strip=True)
