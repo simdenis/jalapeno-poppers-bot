@@ -183,6 +183,7 @@ def _extract_items_by_meal(html: str) -> dict[str, list[str]]:
         text = elem.get_text(" ", strip=True)
         if not text or len(text) > 120:
             continue
+        text = re.sub(r"\\s*nutrition\\s*\\+\\s*ingredients\\s*$", "", text, flags=re.IGNORECASE)
         meal = None
 
         tag_match = re.search(r"\[(.*?)\]", text)
