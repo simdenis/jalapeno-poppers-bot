@@ -395,7 +395,9 @@ def find_keyword_snippets(
             continue
         if not html:
             continue
-        items_by_meal = _extract_items_by_meal(html)
+        items_by_meal = extract_items_all(html)
+        if not any(items_by_meal.values()):
+            items_by_meal = _extract_items_by_meal(html)
         snippets: list[str] = []
         for items in items_by_meal.values():
             for item in items:
