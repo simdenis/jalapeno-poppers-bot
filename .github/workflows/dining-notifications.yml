@@ -3,9 +3,9 @@ name: Daily Dining Notifications
 on:
   # Allow manual runs from the Actions tab
   workflow_dispatch:
-  # Run every day at 12:00 UTC
+  # Run every day at 13:00 UTC (8:00 AM EST)
   schedule:
-    - cron: '0 12 * * *'
+    - cron: '0 13 * * *'
 
 jobs:
   send-notifications:
