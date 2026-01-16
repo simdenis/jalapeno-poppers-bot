@@ -183,15 +183,30 @@ def _extract_items_by_meal(html: str) -> dict[str, list[str]]:
         text = elem.get_text(" ", strip=True)
         if not text or len(text) > 120:
             continue
-        prev_heading = elem.find_previous(["h1", "h2", "h3", "h4", "h5"])
-        meal = "Unspecified"
-        if prev_heading:
-            heading_text = prev_heading.get_text(" ", strip=True).lower()
-            for label in meal_labels:
-                if label in heading_text:
-                    meal = label.capitalize()
-                    break
-        items_by_meal.setdefault(meal, []).append(text)
+        meal = None
+
+        tag_match = re.search(r"\[(.*?)\]", text)
+        if tag_match:
+            tag_text = tag_match.group(1).lower()
+            if "br" in tag_text:
+                meal = "Brunch"
+            elif "b" in tag_text:
+                meal = "Breakfast"
+            elif "l" in tag_text:
+                meal = "Lunch"
+            elif "d" in tag_text:
+                meal = "Dinner"
+
+        if not meal:
+            prev_heading = elem.find_previous(["h1", "h2", "h3", "h4", "h5"])
+            if prev_heading:
+                heading_text = prev_heading.get_text(" ", strip=True).lower()
+                for label in meal_labels:
+                    if label in heading_text:
+                        meal = label.capitalize()
+                        break
+
+        items_by_meal.setdefault(meal or "Unspecified", []).append(text)
 
     return items_by_meal
 
