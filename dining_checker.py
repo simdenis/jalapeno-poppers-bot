@@ -154,113 +154,9 @@ def page_contains_any_keyword(html: str, keywords: list[str]) -> bool:
     return False
 
 
-def _extract_items_by_meal(html: str) -> dict[str, list[str]]:
-    """
-    Extract item labels grouped by meal/daypart from weekly-menu HTML.
-    """
-    soup = BeautifulSoup(html, "html.parser")
+def _extract_items_by_meal_from_root(root) -> dict[str, list[str]]:
     meal_labels = {"breakfast", "brunch", "lunch", "dinner"}
     items_by_meal: dict[str, list[str]] = {}
-
-    def _find_today_container():
-        today = date.today()
-        iso = today.isoformat()
-        candidates = []
-        for elem in soup.find_all(attrs={"data-date": True}):
-            if iso in elem.get("data-date", ""):
-                candidates.append(elem)
-        if candidates:
-            return candidates[0]
-
-        for elem in soup.find_all(attrs={"data-day": True}):
-            if iso in elem.get("data-day", ""):
-                candidates.append(elem)
-        if candidates:
-            return candidates[0]
-
-        label_variants = {
-            today.strftime("%b %d"),
-            today.strftime("%B %d"),
-            today.strftime("%a, %b %d"),
-            today.strftime("%A, %b %d"),
-            "Today",
-        }
-        for elem in soup.find_all(["section", "div", "article"]):
-            text = elem.get_text(" ", strip=True)
-            if any(label in text for label in label_variants):
-                return elem
-        return None
-
-    today_container = _find_today_container()
-
-    # First try embedded JSON states (some pages render menu data via JS).
-    def _extract_items_from_json(obj) -> dict[str, list[str]]:
-        items: dict[str, list[str]] = {}
-
-        def add_item(meal: str | None, label: str):
-            items.setdefault(meal or "Unspecified", []).append(label)
-
-        def walk(node, current_meal: str | None = None):
-            if isinstance(node, dict):
-                dayparts = node.get("dayparts") or node.get("dayParts")
-                if isinstance(dayparts, list):
-                    for dp in dayparts:
-                        label = None
-                        if isinstance(dp, dict):
-                            label = dp.get("label") or dp.get("name")
-                        walk(dp, label or current_meal)
-
-                for key in ("items", "menu_items", "menuItems"):
-                    val = node.get(key)
-                    if isinstance(val, list):
-                        for item in val:
-                            if isinstance(item, dict):
-                                label = item.get("label") or item.get("name")
-                                if label:
-                                    add_item(current_meal, label)
-
-                for value in node.values():
-                    walk(value, current_meal)
-            elif isinstance(node, list):
-                for item in node:
-                    walk(item, current_meal)
-
-        walk(obj)
-        return items
-
-    def _try_parse_json(text: str):
-        text = text.strip()
-        if not text:
-            return None
-        # If the script is already JSON.
-        if text.startswith("{") and text.endswith("}"):
-            try:
-                return json.loads(text)
-            except Exception:
-                return None
-        # Common JS assignment patterns.
-        patterns = [
-            r"window\.__PRELOADED_STATE__\s*=\s*({.*});",
-            r"window\.__INITIAL_STATE__\s*=\s*({.*});",
-            r"__NEXT_DATA__\s*=\s*({.*});",
-        ]
-        for pattern in patterns:
-            m = re.search(pattern, text, re.DOTALL)
-            if m:
-                try:
-                    return json.loads(m.group(1))
-                except Exception:
-                    continue
-        return None
-
-    for script in soup.find_all("script"):
-        data = _try_parse_json(script.string or script.get_text())
-        if data:
-            items = _extract_items_from_json(data)
-            if any(items.values()):
-                return items
-
-    root = today_container if today_container is not None else soup
 
     item_selectors = [
         "[data-menu-item]",
@@ -314,6 +210,130 @@ def _extract_items_by_meal(html: str) -> dict[str, list[str]]:
         items_by_meal.setdefault(meal or "Unspecified", []).append(text)
 
     return items_by_meal
+
+
+def _extract_items_by_meal(html: str) -> dict[str, list[str]]:
+    """
+    Extract item labels grouped by meal/daypart from weekly-menu HTML.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    def _find_today_container():
+        today = date.today()
+        iso = today.isoformat()
+        candidates = []
+        for elem in soup.find_all(attrs={"data-date": True}):
+            if iso in elem.get("data-date", ""):
+                candidates.append(elem)
+        if candidates:
+            return candidates[0]
+
+        for elem in soup.find_all(attrs={"data-day": True}):
+            if iso in elem.get("data-day", ""):
+                candidates.append(elem)
+        if candidates:
+            return candidates[0]
+
+        label_variants = {
+            today.strftime("%b %d"),
+            today.strftime("%B %d"),
+            today.strftime("%a, %b %d"),
+            today.strftime("%A, %b %d"),
+            "Today",
+        }
+        for elem in soup.find_all(["section", "div", "article"]):
+            text = elem.get_text(" ", strip=True)
+            if any(label in text for label in label_variants):
+                return elem
+        return None
+
+    def _extract_items_from_json(obj) -> dict[str, list[str]]:
+        items: dict[str, list[str]] = {}
+
+        def add_item(meal: str | None, label: str):
+            items.setdefault(meal or "Unspecified", []).append(label)
+
+        def walk(node, current_meal: str | None = None):
+            if isinstance(node, dict):
+                dayparts = node.get("dayparts") or node.get("dayParts")
+                if isinstance(dayparts, list):
+                    for dp in dayparts:
+                        label = None
+                        if isinstance(dp, dict):
+                            label = dp.get("label") or dp.get("name")
+                        walk(dp, label or current_meal)
+
+                for key in ("items", "menu_items", "menuItems"):
+                    val = node.get(key)
+                    if isinstance(val, list):
+                        for item in val:
+                            if isinstance(item, dict):
+                                label = item.get("label") or item.get("name")
+                                if label:
+                                    add_item(current_meal, label)
+
+                for value in node.values():
+                    walk(value, current_meal)
+            elif isinstance(node, list):
+                for item in node:
+                    walk(item, current_meal)
+
+        walk(obj)
+        return items
+
+    def _try_parse_json(text: str):
+        text = text.strip()
+        if not text:
+            return None
+        if text.startswith("{") and text.endswith("}"):
+            try:
+                return json.loads(text)
+            except Exception:
+                return None
+        patterns = [
+            r"window\.__PRELOADED_STATE__\s*=\s*({.*});",
+            r"window\.__INITIAL_STATE__\s*=\s*({.*});",
+            r"__NEXT_DATA__\s*=\s*({.*});",
+        ]
+        for pattern in patterns:
+            m = re.search(pattern, text, re.DOTALL)
+            if m:
+                try:
+                    return json.loads(m.group(1))
+                except Exception:
+                    continue
+        return None
+
+    for script in soup.find_all("script"):
+        data = _try_parse_json(script.string or script.get_text())
+        if data:
+            items = _extract_items_from_json(data)
+            if any(items.values()):
+                return items
+
+    today_container = _find_today_container()
+    root = today_container if today_container is not None else soup
+    return _extract_items_by_meal_from_root(root)
+
+
+def extract_week_by_day(html: str) -> dict[str, dict[str, list[str]]]:
+    soup = BeautifulSoup(html, "html.parser")
+    results: dict[str, dict[str, list[str]]] = {}
+    containers = []
+    for elem in soup.find_all(attrs={"data-date": True}):
+        containers.append((elem.get("data-date", ""), elem))
+    for elem in soup.find_all(attrs={"data-day": True}):
+        containers.append((elem.get("data-day", ""), elem))
+
+    if not containers:
+        results["Unspecified"] = _extract_items_by_meal_from_root(soup)
+        return results
+
+    for label, elem in containers:
+        items = _extract_items_by_meal_from_root(elem)
+        if items:
+            results[label or "Unspecified"] = items
+    return results
 
 
 def _find_keyword_details_from_items(
