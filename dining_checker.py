@@ -2,6 +2,7 @@
 
 import os
 import smtplib
+import json
 from email.message import EmailMessage
 from typing import Dict, List, Set
 from datetime import date
@@ -25,6 +26,20 @@ DINING_URLS = {
     "McCormick": "http://mit.cafebonappetit.com/cafe/mccormick/",
     "Next House": "http://mit.cafebonappetit.com/cafe/next/",
 }
+DINING_CAFE_IDS = {
+    "Simmons Hall": None,
+    "Maseeh Hall": None,
+    "New Vassar": None,
+    "Baker House": None,
+    "McCormick": None,
+    "Next House": None,
+}
+_cafe_ids_env = os.getenv("DINING_CAFE_IDS_JSON")
+if _cafe_ids_env:
+    try:
+        DINING_CAFE_IDS.update(json.loads(_cafe_ids_env))
+    except Exception:
+        print("[WARN] Failed to parse DINING_CAFE_IDS_JSON")
 
 
 # ----------------------------
@@ -39,6 +54,7 @@ EMAIL_PORT = int(_email_port_str)
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 MENU_CACHE_ENABLED = os.getenv("MENU_CACHE_ENABLED", "true").lower() == "true"
+MENU_API_BASE = "http://legacy.cafebonappetit.com/api/2/menus"
 
 
 # ----------------------------
@@ -59,7 +75,7 @@ def _get_cached_menu(hall: str, menu_date: date) -> str | None:
     return row[0] if row else None
 
 
-def _set_cached_menu(hall: str, menu_date: date, html: str) -> None:
+def _set_cached_menu(hall: str, menu_date: date, payload: str) -> None:
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -69,23 +85,39 @@ def _set_cached_menu(hall: str, menu_date: date, html: str) -> None:
                 ON CONFLICT (hall, menu_date) DO UPDATE
                 SET html = EXCLUDED.html, fetched_at = NOW()
                 """,
-                (hall, menu_date, html),
+                (hall, menu_date, payload),
             )
 
 
-def fetch_menu(hall: str, url: str) -> str:
-    """Fetch raw HTML for a dining hall menu."""
+def fetch_menu(hall: str, url: str) -> dict | None:
+    """Fetch JSON menu for a dining hall via legacy Bon Appetit API."""
+    cafe_id = DINING_CAFE_IDS.get(hall)
+    if not cafe_id:
+        print(f"[WARN] Missing cafe id for {hall}")
+        return None
+
     today = date.today()
     if MENU_CACHE_ENABLED:
         cached = _get_cached_menu(hall, today)
         if cached:
-            return cached
-    resp = requests.get(url, timeout=15)
+            try:
+                return json.loads(cached)
+            except Exception:
+                pass
+    resp = requests.get(
+        MENU_API_BASE,
+        params={"cafe": cafe_id, "date": today.isoformat()},
+        headers={
+            "Host": "legacy.cafebonappetit.com",
+            "User-Agent": "jalapeno-poppers/1.0",
+        },
+        timeout=15,
+    )
     resp.raise_for_status()
-    html = resp.text
+    data = resp.json()
     if MENU_CACHE_ENABLED:
-        _set_cached_menu(hall, today, html)
-    return html
+        _set_cached_menu(hall, today, json.dumps(data))
+    return data
 
 
 def _normalize_text(text: str) -> str:
@@ -128,6 +160,48 @@ def page_contains_any_keyword(html: str, keywords: list[str]) -> bool:
     return False
 
 
+def _extract_items_by_meal(data: dict) -> dict[str, list[str]]:
+    """
+    Extract item labels grouped by meal/daypart from Bon Appetit menu JSON.
+    """
+    items_by_meal: dict[str, list[str]] = {}
+    days = data.get("days") or []
+    for day in days:
+        cafes = day.get("cafes") or {}
+        for cafe in cafes.values():
+            dayparts = cafe.get("dayparts") or []
+            for daypart in dayparts:
+                meal_label = daypart.get("label") or "Unspecified"
+                stations = daypart.get("stations") or []
+                for station in stations:
+                    items = station.get("items") or []
+                    for item in items:
+                        label = item.get("label") or item.get("name")
+                        if not label:
+                            continue
+                        items_by_meal.setdefault(meal_label, []).append(label)
+    return items_by_meal
+
+
+def _find_keyword_details_from_items(
+    items_by_meal: dict[str, list[str]],
+    keywords: list[str]
+) -> Dict[str, Set[str]]:
+    kw_list = [k.strip() for k in keywords if k and k.strip()]
+    kw_list = list(dict.fromkeys(kw_list))
+    if not kw_list:
+        return {}
+
+    matches: Dict[str, Set[str]] = {}
+    for meal_label, items in items_by_meal.items():
+        for item in items:
+            item_tokens = _tokenize(item)
+            for kw in kw_list:
+                if _contains_sequence(item_tokens, _tokenize(kw)):
+                    matches.setdefault(kw, set()).add(meal_label)
+    return matches
+
+
 def find_keyword_snippets(
     keywords: list[str],
     halls_filter=None,
@@ -152,25 +226,26 @@ def find_keyword_snippets(
         if hall not in allowed_halls:
             continue
         try:
-            html = fetch_menu(hall, url)
+            data = fetch_menu(hall, url)
         except Exception as e:
             print(f"[WARN] Failed to fetch menu for {hall}: {e}")
             continue
-
-        soup = BeautifulSoup(html, "html.parser")
-        lines = [ln.strip() for ln in soup.get_text(separator="\n").splitlines()]
-        lines = [ln for ln in lines if ln]
-
+        if not data:
+            continue
+        items_by_meal = _extract_items_by_meal(data)
         snippets: list[str] = []
-        for line in lines:
-            line_tokens = _tokenize(line)
-            matched = False
-            for kw in kw_list:
-                if _contains_sequence(line_tokens, _tokenize(kw)):
-                    matched = True
+        for items in items_by_meal.values():
+            for item in items:
+                item_tokens = _tokenize(item)
+                matched = False
+                for kw in kw_list:
+                    if _contains_sequence(item_tokens, _tokenize(kw)):
+                        matched = True
+                        break
+                if matched and item not in snippets:
+                    snippets.append(item)
+                if len(snippets) >= max_lines:
                     break
-            if matched and line not in snippets:
-                snippets.append(line)
             if len(snippets) >= max_lines:
                 break
 
@@ -200,8 +275,11 @@ def find_item_locations(keywords: list[str], halls_filter = None) -> list[str]:
             continue
 
         try:
-            html = fetch_menu(hall, url)
-            if page_contains_any_keyword(html, keywords):
+            data = fetch_menu(hall, url)
+            if not data:
+                continue
+            items_by_meal = _extract_items_by_meal(data)
+            if _find_keyword_details_from_items(items_by_meal, keywords):
                 hits.append(hall)
         except Exception as e:
             print(f"[WARN] Failed to check {hall}: {e}")
@@ -251,50 +329,15 @@ def find_keyword_details(
             continue
 
         try:
-            html = fetch_menu(hall, url)
+            data = fetch_menu(hall, url)
         except Exception as e:
             print(f"[WARN] Failed to fetch menu for {hall}: {e}")
             continue
+        if not data:
+            continue
 
-        soup = BeautifulSoup(html, "html.parser")
-        text = soup.get_text(separator="\n")
-        text_lower = _normalize_text(text)
-
-        # --- Build meal segments heuristically ---
-        meal_names = ["breakfast", "brunch", "lunch", "dinner"]
-        markers = []
-
-        for meal in meal_names:
-            idx = text_lower.find(meal)
-            if idx != -1:
-                markers.append((idx, meal))
-
-        markers.sort(key=lambda x: x[0])  # sort by position
-
-        segments = []  # list of (meal_label, segment_text_lower)
-
-        if markers:
-            for i, (start_idx, meal) in enumerate(markers):
-                if i + 1 < len(markers):
-                    end_idx = markers[i + 1][0]
-                else:
-                    end_idx = len(text_lower)
-                segment = text_lower[start_idx:end_idx]
-                segments.append((meal.capitalize(), _tokenize(segment)))
-        else:
-            # No explicit meal markers found; treat entire text as one segment
-            segments.append(("(unspecified meal)", _tokenize(text_lower)))
-
-        hall_matches: Dict[str, Set[str]] = {}
-
-        # For each segment and each keyword, see where it appears
-        for meal_label, seg_tokens in segments:
-            for kw in kw_list:
-                kw_tokens = _tokenize(kw)
-                if _contains_sequence(seg_tokens, kw_tokens):
-                    if kw not in hall_matches:
-                        hall_matches[kw] = set()
-                    hall_matches[kw].add(meal_label)
+        items_by_meal = _extract_items_by_meal(data)
+        hall_matches = _find_keyword_details_from_items(items_by_meal, kw_list)
 
         if hall_matches:
             results[hall] = hall_matches
