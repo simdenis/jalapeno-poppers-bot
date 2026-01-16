@@ -162,6 +162,73 @@ def _extract_items_by_meal(html: str) -> dict[str, list[str]]:
     meal_labels = {"breakfast", "brunch", "lunch", "dinner"}
     items_by_meal: dict[str, list[str]] = {}
 
+    # First try embedded JSON states (some pages render menu data via JS).
+    def _extract_items_from_json(obj) -> dict[str, list[str]]:
+        items: dict[str, list[str]] = {}
+
+        def add_item(meal: str | None, label: str):
+            items.setdefault(meal or "Unspecified", []).append(label)
+
+        def walk(node, current_meal: str | None = None):
+            if isinstance(node, dict):
+                dayparts = node.get("dayparts") or node.get("dayParts")
+                if isinstance(dayparts, list):
+                    for dp in dayparts:
+                        label = None
+                        if isinstance(dp, dict):
+                            label = dp.get("label") or dp.get("name")
+                        walk(dp, label or current_meal)
+
+                for key in ("items", "menu_items", "menuItems"):
+                    val = node.get(key)
+                    if isinstance(val, list):
+                        for item in val:
+                            if isinstance(item, dict):
+                                label = item.get("label") or item.get("name")
+                                if label:
+                                    add_item(current_meal, label)
+
+                for value in node.values():
+                    walk(value, current_meal)
+            elif isinstance(node, list):
+                for item in node:
+                    walk(item, current_meal)
+
+        walk(obj)
+        return items
+
+    def _try_parse_json(text: str):
+        text = text.strip()
+        if not text:
+            return None
+        # If the script is already JSON.
+        if text.startswith("{") and text.endswith("}"):
+            try:
+                return json.loads(text)
+            except Exception:
+                return None
+        # Common JS assignment patterns.
+        patterns = [
+            r"window\.__PRELOADED_STATE__\s*=\s*({.*});",
+            r"window\.__INITIAL_STATE__\s*=\s*({.*});",
+            r"__NEXT_DATA__\s*=\s*({.*});",
+        ]
+        for pattern in patterns:
+            m = re.search(pattern, text, re.DOTALL)
+            if m:
+                try:
+                    return json.loads(m.group(1))
+                except Exception:
+                    continue
+        return None
+
+    for script in soup.find_all("script"):
+        data = _try_parse_json(script.string or script.get_text())
+        if data:
+            items = _extract_items_from_json(data)
+            if any(items.values()):
+                return items
+
     item_selectors = [
         "[data-menu-item]",
         "[data-item-name]",
