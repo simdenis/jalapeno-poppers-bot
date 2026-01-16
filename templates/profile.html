@@ -126,6 +126,37 @@
           <p class="text-muted mb-0">No matches found today.</p>
         {% endif %}
       </div>
+
+      <div class="mt-4">
+        <h2 class="h6 text-uppercase text-muted">Today’s menu feed</h2>
+        {% if snippets %}
+          {% for hall_name in snippets %}
+            <div class="mb-3">
+              <strong>{{ hall_name }}</strong>
+              <ul class="mb-0">
+                {% for line in snippets[hall_name] %}
+                  <li>{{ line }}</li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p class="text-muted mb-0">No keyword lines found today.</p>
+        {% endif %}
+      </div>
+
+      <div class="mt-4">
+        <h2 class="h6 text-uppercase text-muted">You might also like</h2>
+        {% if suggestions %}
+          <div class="d-flex flex-wrap gap-2">
+            {% for word in suggestions %}
+              <span class="badge badge-keyword rounded-pill px-3 py-2">{{ word }}</span>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="text-muted mb-0">No suggestions yet.</p>
+        {% endif %}
+      </div>
     {% else %}
       <p class="mb-0 text-muted">
         You don’t have any subscriptions yet. Head back to the home page to add magic words.

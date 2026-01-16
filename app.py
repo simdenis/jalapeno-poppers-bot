@@ -8,7 +8,7 @@ from functools import wraps
 from collections import Counter
 from dotenv import load_dotenv
 from db import get_conn, ensure_schema
-from dining_checker import DINING_URLS, find_keyword_details, send_email
+from dining_checker import DINING_URLS, find_keyword_details, find_keyword_snippets, send_email
 
 
 load_dotenv()
@@ -392,16 +392,40 @@ def logout():
 def profile():
     subscription = _get_subscription(session["user_id"])
     matches = None
+    snippets = None
+    suggestions = []
     if subscription and subscription["keywords"]:
         try:
             halls_filter = subscription["halls"] or None
             matches = find_keyword_details(subscription["keywords"], halls_filter=halls_filter)
+            snippets = find_keyword_snippets(
+                subscription["keywords"],
+                halls_filter=halls_filter,
+                max_lines=3,
+            )
         except Exception as e:
             print(f"[WARN] Failed to load menu matches for profile: {e}")
+
+    keyword_counts = Counter()
+    if subscription:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT item_keywords FROM subscriptions")
+                rows = cur.fetchall()
+        for (kw_json,) in rows:
+            try:
+                keywords = json.loads(kw_json) if kw_json else []
+            except Exception:
+                keywords = []
+            keyword_counts.update([k for k in keywords if k])
+        existing = set(subscription["keywords"])
+        suggestions = [k for k, _ in keyword_counts.most_common() if k not in existing][:5]
     return render_template(
         "profile.html",
         subscription=subscription,
         matches=matches,
+        snippets=snippets,
+        suggestions=suggestions,
         user_email=session.get("user_email", ""),
         profile_url=url_for("profile"),
         csrf_token=get_csrf_token(),

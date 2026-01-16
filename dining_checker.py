@@ -128,6 +128,58 @@ def page_contains_any_keyword(html: str, keywords: list[str]) -> bool:
     return False
 
 
+def find_keyword_snippets(
+    keywords: list[str],
+    halls_filter=None,
+    max_lines: int = 3
+) -> dict[str, list[str]]:
+    """
+    Return short menu text snippets per hall that contain the keywords.
+    """
+    kw_list = [k.strip() for k in keywords if k and k.strip()]
+    kw_list = list(dict.fromkeys(kw_list))
+    if not kw_list:
+        return {}
+
+    if halls_filter:
+        allowed_halls = set(halls_filter)
+    else:
+        allowed_halls = set(DINING_URLS.keys())
+
+    results: dict[str, list[str]] = {}
+
+    for hall, url in DINING_URLS.items():
+        if hall not in allowed_halls:
+            continue
+        try:
+            html = fetch_menu(hall, url)
+        except Exception as e:
+            print(f"[WARN] Failed to fetch menu for {hall}: {e}")
+            continue
+
+        soup = BeautifulSoup(html, "html.parser")
+        lines = [ln.strip() for ln in soup.get_text(separator="\n").splitlines()]
+        lines = [ln for ln in lines if ln]
+
+        snippets: list[str] = []
+        for line in lines:
+            line_tokens = _tokenize(line)
+            matched = False
+            for kw in kw_list:
+                if _contains_sequence(line_tokens, _tokenize(kw)):
+                    matched = True
+                    break
+            if matched and line not in snippets:
+                snippets.append(line)
+            if len(snippets) >= max_lines:
+                break
+
+        if snippets:
+            results[hall] = snippets
+
+    return results
+
+
 def find_item_locations(keywords: list[str], halls_filter = None) -> list[str]:
     """
     For a list of keywords like ["jalapeno"], return a list of dining hall
