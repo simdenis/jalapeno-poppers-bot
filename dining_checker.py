@@ -202,10 +202,14 @@ def _extract_items_by_meal_from_root(root) -> dict[str, list[str]]:
                         break
         if not meal:
             daypart_container = elem.find_parent(class_="site-panel__daypart")
+            if not daypart_container:
+                daypart_container = elem.find_parent(class_=re.compile(r"site-panel--daypart", re.I))
+            if not daypart_container:
+                daypart_container = elem.find_parent(class_=re.compile(r"site-panel__daypart-container", re.I))
             if daypart_container:
                 daypart_title = daypart_container.find(
                     ["h1", "h2", "h3", "h4", "h5"],
-                    class_=re.compile(r"daypart-title", re.I),
+                    class_=re.compile(r"site-panel__daypart-panel-title", re.I),
                 )
                 if daypart_title:
                     heading_text = daypart_title.get_text(" ", strip=True).lower()
