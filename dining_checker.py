@@ -198,6 +198,58 @@ def _extract_items_by_meal(html: str) -> dict[str, list[str]]:
     """
     soup = BeautifulSoup(html, "html.parser")
 
+    def _extract_items_from_bamco(script_text: str) -> dict[str, list[str]] | None:
+        if "Bamco.menu_items" not in script_text or "Bamco.dayparts" not in script_text:
+            return None
+        decoder = json.JSONDecoder()
+
+        def extract_json_after(marker: str):
+            idx = script_text.find(marker)
+            if idx == -1:
+                return None
+            start = script_text.find("{", idx)
+            if start == -1:
+                return None
+            try:
+                obj, _ = decoder.raw_decode(script_text[start:])
+            except Exception:
+                return None
+            return obj
+
+        menu_items = extract_json_after("Bamco.menu_items =")
+        if not isinstance(menu_items, dict):
+            return None
+
+        dayparts = {}
+        for m in re.finditer(r"Bamco\.dayparts\['(\d+)'\]\s*=\s*(\{.*?\});", script_text, re.DOTALL):
+            try:
+                dayparts[m.group(1)] = json.loads(m.group(2))
+            except Exception:
+                continue
+
+        if not dayparts:
+            return None
+
+        items_by_meal: dict[str, list[str]] = {}
+        for dp in dayparts.values():
+            meal_label = dp.get("label") or "Unspecified"
+            for station in dp.get("stations", []):
+                for item_id in station.get("items", []):
+                    item = menu_items.get(str(item_id))
+                    if not item:
+                        continue
+                    label = item.get("label") or item.get("name")
+                    if label:
+                        items_by_meal.setdefault(meal_label, []).append(label)
+        return items_by_meal if any(items_by_meal.values()) else None
+
+    # MIT pages embed menu data in a Bamco JS object; prefer that.
+    for script in soup.find_all("script"):
+        text = script.string or script.get_text() or ""
+        items = _extract_items_from_bamco(text)
+        if items:
+            return items
+
     def _find_today_container(target_date: date):
         iso = target_date.isoformat()
         candidates = []
