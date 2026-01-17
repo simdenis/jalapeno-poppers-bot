@@ -74,6 +74,11 @@ def _set_cached_menu(hall: str, menu_date: date, payload: str) -> None:
             )
 
 
+def _build_dated_menu_url(base_url: str, menu_date: date) -> str:
+    base = base_url.rstrip("/")
+    return f"{base}/{menu_date.isoformat()}/"
+
+
 def fetch_menu(hall: str, url: str) -> str | None:
     """Fetch menu HTML for today from the MIT cafe page."""
     today = date.today()
@@ -82,8 +87,9 @@ def fetch_menu(hall: str, url: str) -> str | None:
         if cached:
             return cached
 
+    dated_url = _build_dated_menu_url(url, today)
     resp = requests.get(
-        url,
+        dated_url,
         headers={"User-Agent": "jalapeno-poppers/1.0"},
         timeout=15,
     )
@@ -144,6 +150,7 @@ def _extract_items_by_meal_from_root(root) -> dict[str, list[str]]:
         ".menu-item",
         ".menu-item-name",
         ".menu-item-title",
+        ".site-panel__daypart-item-title",
         ".menu__item",
         ".menu__item-name",
         ".item-name",
@@ -186,6 +193,19 @@ def _extract_items_by_meal_from_root(root) -> dict[str, list[str]]:
                     if label in heading_text:
                         meal = label.capitalize()
                         break
+        if not meal:
+            daypart_container = elem.find_parent(class_="site-panel__daypart")
+            if daypart_container:
+                daypart_title = daypart_container.find(
+                    ["h1", "h2", "h3", "h4", "h5"],
+                    class_=re.compile(r"daypart-title", re.I),
+                )
+                if daypart_title:
+                    heading_text = daypart_title.get_text(" ", strip=True).lower()
+                    for label in meal_labels:
+                        if label in heading_text:
+                            meal = label.capitalize()
+                            break
 
         items_by_meal.setdefault(meal or "Unspecified", []).append(text)
 
