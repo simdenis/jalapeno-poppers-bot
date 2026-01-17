@@ -163,7 +163,14 @@ def _extract_items_by_meal_from_root(root) -> dict[str, list[str]]:
         item_elements = root.select("li")
 
     for elem in item_elements:
-        text = elem.get_text(" ", strip=True)
+        text = None
+        classes = elem.get("class", []) if hasattr(elem, "get") else []
+        if classes and "site-panel__daypart-item-title" in classes:
+            direct_text = elem.find(string=True, recursive=False)
+            if direct_text:
+                text = direct_text.strip()
+        if not text:
+            text = elem.get_text(" ", strip=True)
         if not text or len(text) > 120:
             continue
         meal = None
