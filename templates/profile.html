@@ -128,20 +128,25 @@
       </div>
 
       <div class="mt-4">
-        <h2 class="h6 text-uppercase text-muted">Today’s menu feed</h2>
-        {% if snippets %}
-          {% for hall_name in snippets %}
+        <h2 class="h6 text-uppercase text-muted">Today’s menu</h2>
+        {% if menu_by_hall %}
+          {% for hall_name in menu_by_hall %}
             <div class="mb-3">
               <strong>{{ hall_name }}</strong>
-              <ul class="mb-0">
-                {% for line in snippets[hall_name] %}
-                  <li>{{ line }}</li>
-                {% endfor %}
-              </ul>
+              {% for meal_name in menu_by_hall[hall_name] %}
+                <div class="mt-2">
+                  <div class="text-muted small text-uppercase">{{ meal_name }}</div>
+                  <ul class="mb-0">
+                    {% for item in menu_by_hall[hall_name][meal_name] %}
+                      <li>{{ item }}</li>
+                    {% endfor %}
+                  </ul>
+                </div>
+              {% endfor %}
             </div>
           {% endfor %}
         {% else %}
-          <p class="text-muted mb-0">No keyword lines found today.</p>
+          <p class="text-muted mb-0">No menu items found today.</p>
         {% endif %}
       </div>
 

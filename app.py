@@ -10,10 +10,8 @@ from dotenv import load_dotenv
 from db import get_conn, ensure_schema
 from dining_checker import (
     DINING_URLS,
-    _extract_items_by_meal,
-    fetch_menu,
     find_keyword_details,
-    find_keyword_snippets,
+    get_today_menu_by_meal,
     send_email,
 )
 
@@ -415,19 +413,20 @@ def logout():
 def profile():
     subscription = _get_subscription(session["user_id"])
     matches = None
-    snippets = None
+    menu_by_hall = None
     suggestions = []
     if subscription and subscription["keywords"]:
         try:
             halls_filter = subscription["halls"] or None
             matches = find_keyword_details(subscription["keywords"], halls_filter=halls_filter)
-            snippets = find_keyword_snippets(
-                subscription["keywords"],
-                halls_filter=halls_filter,
-                max_lines=3,
-            )
         except Exception as e:
             print(f"[WARN] Failed to load menu matches for profile: {e}")
+    if subscription:
+        try:
+            halls_filter = subscription["halls"] or None
+            menu_by_hall = get_today_menu_by_meal(halls_filter=halls_filter, max_items_per_meal=18)
+        except Exception as e:
+            print(f"[WARN] Failed to load today menu for profile: {e}")
 
     keyword_counts = Counter()
     if subscription:
@@ -447,7 +446,7 @@ def profile():
         "profile.html",
         subscription=subscription,
         matches=matches,
-        snippets=snippets,
+        menu_by_hall=menu_by_hall,
         suggestions=suggestions,
         user_email=session.get("user_email", ""),
         profile_url=url_for("profile"),
@@ -567,14 +566,10 @@ def debug_menu():
             f"<ul>{hall_list}</ul>"
         )
 
-    try:
-        html = fetch_menu(hall, DINING_URLS[hall])
-    except Exception as e:
-        return f"Failed to fetch menu for {hall}: {e}", 500
-    if not html:
+    menu = get_today_menu_by_meal(halls_filter=[hall], max_items_per_meal=60)
+    items_by_meal = menu.get(hall, {})
+    if not items_by_meal:
         return f"No menu data for {hall}", 500
-
-    items_by_meal = _extract_items_by_meal(html)
     sections = []
     for meal, items in items_by_meal.items():
         items_html = "".join(f"<li>{item}</li>" for item in items[:30])

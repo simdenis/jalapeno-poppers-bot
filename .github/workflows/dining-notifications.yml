@@ -17,8 +17,8 @@ jobs:
       EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
       EMAIL_USER: ${{ secrets.EMAIL_USER }}
       EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-      ADMIN_DEBUG_TOKEN: ${{ secrets.ADMIN_DEBUG_TOKEN }}
-      DEBUG_ALWAYS_NOTIFY: "true"
+      BASE_URL: ${{ secrets.BASE_URL }}
+      DEBUG_ALWAYS_NOTIFY: "false"
 
     steps:
       - name: Check out repository

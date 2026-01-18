@@ -19,12 +19,12 @@ from db import get_conn
 # ----------------------------
 
 DINING_URLS = {
-    "Simmons Hall": "http://mit.cafebonappetit.com/cafe/simmons/",
-    "Maseeh Hall": "http://mit.cafebonappetit.com/cafe/the-howard-dining-hall-at-maseeh/",
-    "New Vassar": "http://mit.cafebonappetit.com/cafe/new-vassar/",
-    "Baker House": "http://mit.cafebonappetit.com/cafe/baker/",
-    "McCormick": "http://mit.cafebonappetit.com/cafe/mccormick/",
-    "Next House": "http://mit.cafebonappetit.com/cafe/next/",
+    "Simmons Hall": "https://mit.cafebonappetit.com/cafe/simmons/",
+    "Maseeh Hall": "https://mit.cafebonappetit.com/cafe/the-howard-dining-hall-at-maseeh/",
+    "New Vassar": "https://mit.cafebonappetit.com/cafe/new-vassar/",
+    "Baker House": "https://mit.cafebonappetit.com/cafe/baker/",
+    "McCormick": "https://mit.cafebonappetit.com/cafe/mccormick/",
+    "Next House": "https://mit.cafebonappetit.com/cafe/next/",
 }
 
 
@@ -74,9 +74,24 @@ def _set_cached_menu(hall: str, menu_date: date, payload: str) -> None:
             )
 
 
-def _build_dated_menu_url(base_url: str, menu_date: date) -> str:
+def _build_menu_url_candidates(base_url: str, menu_date: date) -> list[str]:
     base = base_url.rstrip("/")
-    return f"{base}/{menu_date.isoformat()}/"
+    iso_date = menu_date.isoformat()
+    return [
+        f"{base}/{iso_date}/",
+        f"{base}/?date={iso_date}",
+        f"{base}/",
+    ]
+
+
+def _fetch_menu_url(url: str) -> str:
+    resp = requests.get(
+        url,
+        headers={"User-Agent": "jalapeno-poppers/1.0"},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.text
 
 
 def fetch_menu(hall: str, url: str) -> str | None:
@@ -87,17 +102,40 @@ def fetch_menu(hall: str, url: str) -> str | None:
         if cached:
             return cached
 
-    dated_url = _build_dated_menu_url(url, today)
-    resp = requests.get(
-        dated_url,
-        headers={"User-Agent": "jalapeno-poppers/1.0"},
-        timeout=15,
-    )
-    resp.raise_for_status()
-    html = resp.text
-    if MENU_CACHE_ENABLED:
-        _set_cached_menu(hall, today, html)
-    return html
+    for candidate in _build_menu_url_candidates(url, today):
+        try:
+            html = _fetch_menu_url(candidate)
+        except Exception:
+            continue
+        if MENU_CACHE_ENABLED:
+            _set_cached_menu(hall, today, html)
+        return html
+    return None
+
+
+def _load_today_menu(hall: str, url: str) -> tuple[dict[str, list[str]], str | None]:
+    today = date.today()
+    cached_html = _get_cached_menu(hall, today) if MENU_CACHE_ENABLED else None
+    if cached_html:
+        items = _extract_items_by_meal(cached_html)
+        if any(items.values()):
+            return items, cached_html
+
+    last_html = cached_html
+    for candidate in _build_menu_url_candidates(url, today):
+        try:
+            html = _fetch_menu_url(candidate)
+        except Exception as e:
+            print(f"[WARN] Failed to fetch menu for {hall} ({candidate}): {e}")
+            continue
+        last_html = html
+        items = _extract_items_by_meal(html)
+        if any(items.values()):
+            if MENU_CACHE_ENABLED:
+                _set_cached_menu(hall, today, html)
+            return items, html
+
+    return {}, last_html
 
 
 def _normalize_text(text: str) -> str:
@@ -378,8 +416,6 @@ def _extract_items_by_meal(html: str) -> dict[str, list[str]]:
     return _extract_items_by_meal_from_root(root)
 
 
-
-
 def extract_week_by_day(html: str) -> dict[str, dict[str, list[str]]]:
     soup = BeautifulSoup(html, "html.parser")
     results: dict[str, dict[str, list[str]]] = {}
@@ -442,20 +478,15 @@ def find_keyword_snippets(
     for hall, url in DINING_URLS.items():
         if hall not in allowed_halls:
             continue
-        try:
-            html = fetch_menu(hall, url)
-        except Exception as e:
-            print(f"[WARN] Failed to fetch menu for {hall}: {e}")
-            continue
-        if not html:
-            continue
-        items_by_meal = _extract_items_by_meal(html)
-        if not any(items_by_meal.values()):
+        items_by_meal, html = _load_today_menu(hall, url)
+        if not items_by_meal and html:
             # Fallback: scan lines if menu items aren't detected
             soup = BeautifulSoup(html, "html.parser")
             lines = [ln.strip() for ln in soup.get_text(separator="\n").splitlines()]
             lines = [ln for ln in lines if ln]
             items_by_meal = {"Unspecified": lines}
+        if not items_by_meal:
+            continue
         snippets: list[str] = []
         for items in items_by_meal.values():
             for item in items:
@@ -474,6 +505,33 @@ def find_keyword_snippets(
 
         if snippets:
             results[hall] = snippets
+
+    return results
+
+
+def get_today_menu_by_meal(
+    halls_filter=None,
+    max_items_per_meal: int = 30
+) -> dict[str, dict[str, list[str]]]:
+    allowed_meals = {"Breakfast", "Brunch", "Lunch", "Dinner"}
+    if halls_filter:
+        allowed_halls = set(halls_filter)
+    else:
+        allowed_halls = set(DINING_URLS.keys())
+
+    results: dict[str, dict[str, list[str]]] = {}
+    for hall, url in DINING_URLS.items():
+        if hall not in allowed_halls:
+            continue
+        items_by_meal, _ = _load_today_menu(hall, url)
+        if not items_by_meal:
+            continue
+        trimmed = {}
+        for meal, items in items_by_meal.items():
+            if meal not in allowed_meals:
+                continue
+            trimmed[meal] = items[:max_items_per_meal]
+        results[hall] = trimmed
 
     return results
 
@@ -497,15 +555,9 @@ def find_item_locations(keywords: list[str], halls_filter = None) -> list[str]:
         if hall not in halls_to_check:
             continue
 
-        try:
-            html = fetch_menu(hall, url)
-            if not html:
-                continue
-            items_by_meal = _extract_items_by_meal(html)
-            if _find_keyword_details_from_items(items_by_meal, keywords):
-                hits.append(hall)
-        except Exception as e:
-            print(f"[WARN] Failed to check {hall}: {e}")
+        items_by_meal, _ = _load_today_menu(hall, url)
+        if _find_keyword_details_from_items(items_by_meal, keywords):
+            hits.append(hall)
 
     return hits
 
@@ -551,15 +603,7 @@ def find_keyword_details(
         if hall not in allowed_halls:
             continue
 
-        try:
-            html = fetch_menu(hall, url)
-        except Exception as e:
-            print(f"[WARN] Failed to fetch menu for {hall}: {e}")
-            continue
-        if not html:
-            continue
-
-        items_by_meal = _extract_items_by_meal(html)
+        items_by_meal, _ = _load_today_menu(hall, url)
         hall_matches = _find_keyword_details_from_items(items_by_meal, kw_list)
 
         if hall_matches:
