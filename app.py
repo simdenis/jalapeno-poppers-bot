@@ -251,6 +251,7 @@ DINING_HALLS = sorted(DINING_URLS.keys())
 @app.route("/", methods=["GET"])
 def index():
     login_next = request.args.get("next", "")
+    message = session.pop("flash_message", "")
     keyword_counts = Counter()
     hall_counts = Counter()
     total_subscriptions = 0
@@ -276,7 +277,7 @@ def index():
 
     return render_template(
         "index.html",
-        message="",
+        message=message,
         halls=DINING_HALLS,
         csrf_token=get_csrf_token(),
         is_logged_in="user_id" in session,
@@ -686,18 +687,12 @@ def subscribe():
                     except Exception as e:
                         print(f"[WARN] Failed to send welcome email to {email}: {e}")
 
-    return render_template(
-        "index.html",
-        message=(
-            "Subscribed! We’ll watch for dishes matching: "
-            f"{', '.join(new_keywords)}. "
-            "(You can add more magic words later from this account.)"
-        ),
-        halls=DINING_HALLS,
-        csrf_token=get_csrf_token(),
-        is_logged_in=True,
-        user_email=email,
+    session["flash_message"] = (
+        "Subscribed! We’ll watch for dishes matching: "
+        f"{', '.join(new_keywords)}. "
+        "(You can add more magic words later from this account.)"
     )
+    return redirect(url_for("index"))
 
 
 @app.route("/unsubscribe", methods=["POST"])
