@@ -9,8 +9,55 @@
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
       rel="stylesheet"
   >
+
+  <style>
+    :root {
+      --orange: #f97316;
+      --pink: #ec4899;
+      --cyan: #06b6d4;
+      --border: #e5e7eb;
+      --text: #111827;
+      --muted: #6b7280;
+    }
+
+    body {
+      min-height: 100vh;
+      background: #fafafa;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      color: var(--text);
+    }
+
+    .card {
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      box-shadow: none;
+    }
+
+    .card-accent-orange {
+      border-top: 3px solid var(--orange);
+    }
+
+    .card-accent-pink {
+      border-top: 3px solid var(--pink);
+    }
+
+    .card-accent-cyan {
+      border-top: 3px solid var(--cyan);
+    }
+
+    .stat-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    .btn-outline-dark {
+      border-radius: 8px;
+    }
+  </style>
 </head>
-<body class="bg-light">
+<body>
 <div class="container py-4">
   <div class="d-flex align-items-center justify-content-between mb-4">
     <div>
@@ -22,14 +69,14 @@
 
   <div class="row g-4">
     <div class="col-md-4">
-      <div class="card p-3">
-        <div class="text-muted text-uppercase small">Total subscribers</div>
+      <div class="card card-accent-orange p-3">
+        <div class="stat-label">Total subscribers</div>
         <div class="display-6">{{ total_subscriptions }}</div>
       </div>
     </div>
     <div class="col-md-4">
-      <div class="card p-3">
-        <div class="text-muted text-uppercase small">Top magic words</div>
+      <div class="card card-accent-pink p-3">
+        <div class="stat-label">Top magic words</div>
         <ol class="mb-0">
           {% for word, count in keyword_counts %}
             <li>{{ word }} <span class="text-muted">({{ count }})</span></li>
@@ -40,8 +87,8 @@
       </div>
     </div>
     <div class="col-md-4">
-      <div class="card p-3">
-        <div class="text-muted text-uppercase small">Top halls</div>
+      <div class="card card-accent-cyan p-3">
+        <div class="stat-label">Top halls</div>
         <ol class="mb-0">
           {% for hall, count in hall_counts %}
             <li>{{ hall }} <span class="text-muted">({{ count }})</span></li>
