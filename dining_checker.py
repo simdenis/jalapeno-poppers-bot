@@ -39,6 +39,8 @@ _email_port_str = os.getenv("EMAIL_PORT") or "587"
 EMAIL_PORT = int(_email_port_str)
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+EMAIL_FROM = os.getenv("EMAIL_FROM") or EMAIL_USER
+EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME") or "MIT Dining Alerts"
 MENU_CACHE_ENABLED = os.getenv("MENU_CACHE_ENABLED", "true").lower() == "true"
 
 
@@ -616,17 +618,27 @@ def find_keyword_details(
 # Email sending
 # ----------------------------
 
-def send_email(to_email: str, subject: str, body: str, html_body: str | None = None) -> None:
+def send_email(
+    to_email: str,
+    subject: str,
+    body: str,
+    html_body: str | None = None,
+    list_unsubscribe: str | None = None,
+) -> None:
     """
-    Send a UTF-8 email using Gmail SMTP and an app password.
+    Send a UTF-8 email using SMTP and an app password.
     """
     if not EMAIL_USER or not EMAIL_PASSWORD:
         raise RuntimeError("EMAIL_USER or EMAIL_PASSWORD not set")
 
     msg = EmailMessage()
-    msg["From"] = EMAIL_USER
+    msg["From"] = f"{EMAIL_FROM_NAME} <{EMAIL_FROM}>"
     msg["To"] = to_email
+    msg["Reply-To"] = EMAIL_FROM
     msg["Subject"] = subject
+    if list_unsubscribe:
+        msg["List-Unsubscribe"] = f"<{list_unsubscribe}>"
+        msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
     msg.set_content(body)  # UTF-8 by default
     if html_body:
         msg.add_alternative(html_body, subtype="html")

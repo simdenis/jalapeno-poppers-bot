@@ -177,7 +177,8 @@ def main():
         html_lines.append("</div>")
         html_body = "".join(html_lines)
 
-        send_email(email, subject, body, html_body=html_body)
+        send_email(email, subject, body, html_body=html_body,
+                   list_unsubscribe=unsubscribe_link)
 
         # Mark as notified today
         update_last_notified(email, today)
