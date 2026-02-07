@@ -17,18 +17,19 @@
 
   <style>
     :root {
-      --accent: #ff6b6b;
-      --accent-soft: #ffe4d6;
-      --bg: #f8fafc;
-      --card-bg: #ffffff;
-      --text-muted: #6b7280;
+      --orange: #f97316;
+      --pink: #ec4899;
+      --cyan: #06b6d4;
+      --border: #e5e7eb;
+      --text: #111827;
+      --muted: #6b7280;
     }
 
     body {
       min-height: 100vh;
-      background: radial-gradient(circle at top left, #ffe4e6 0, #f8fafc 35%, #e0f2fe 100%);
+      background: #fafafa;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
-      color: #111827;
+      color: var(--text);
     }
 
     .hero {
@@ -36,18 +37,9 @@
       margin-bottom: 2rem;
     }
 
-    .hero-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0.25rem 0.75rem;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.8);
-      font-size: 0.8rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--accent);
-      font-weight: 600;
+    .hero-emoji {
+      font-size: 2.2rem;
+      line-height: 1;
     }
 
     .hero-title {
@@ -58,44 +50,46 @@
     .hero-subtitle {
       max-width: 32rem;
       margin: 0 auto;
-      color: var(--text-muted);
+      color: var(--muted);
     }
 
     .card {
-      border-radius: 18px;
-      border: none;
-      background: var(--card-bg);
-      box-shadow: 0 14px 40px rgba(15, 23, 42, 0.08);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      box-shadow: none;
     }
 
-    .card-header-soft {
-      border-bottom: none;
-      background: linear-gradient(135deg, #ffe4d6, #fef3c7);
-      border-radius: 16px 16px 0 0;
+    .card-accent-orange {
+      border-top: 3px solid var(--orange);
+    }
+
+    .card-accent-pink {
+      border-left: 3px solid var(--pink);
+    }
+
+    .card-accent-cyan {
+      border-top: 3px solid var(--cyan);
+    }
+
+    .card-header-clean {
       padding: 0.9rem 1.25rem;
       display: flex;
       align-items: center;
       gap: 0.5rem;
+      border-bottom: 1px solid var(--border);
+      background: transparent;
     }
 
-    .card-pill {
-      width: 28px;
-      height: 28px;
-      border-radius: 999px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #ffffffcc;
+    .card-header-clean .card-icon {
       font-size: 1.1rem;
     }
 
-    .card-title-main {
+    .card-header-clean .card-title {
       margin: 0;
       font-size: 0.95rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
       font-weight: 700;
-      color: #78350f;
+      color: var(--text);
     }
 
     .card-body {
@@ -105,15 +99,13 @@
     .form-label {
       font-size: 0.85rem;
       font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: #6b7280;
+      color: var(--muted);
     }
 
     .form-control,
     .form-select {
-      border-radius: 999px;
-      border-color: #e5e7eb;
+      border-radius: 8px;
+      border-color: var(--border);
       padding-inline: 1rem;
       padding-block: 0.55rem;
       font-size: 0.95rem;
@@ -121,41 +113,49 @@
 
     .form-text {
       font-size: 0.8rem;
-      color: var(--text-muted);
+      color: var(--muted);
     }
 
     .btn-primary {
-      border-radius: 999px;
+      border-radius: 8px;
       border: none;
-      background: linear-gradient(135deg, #f97316, #ec4899);
+      background: var(--orange);
       font-weight: 600;
-      letter-spacing: 0.03em;
-      text-transform: uppercase;
-      font-size: 0.85rem;
+      font-size: 0.9rem;
       padding-block: 0.6rem;
     }
 
     .btn-primary:hover {
-      background: linear-gradient(135deg, #ea580c, #db2777);
+      background: #ea580c;
     }
 
     .btn-outline-danger {
-      border-radius: 999px;
-      font-size: 0.8rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
       padding-block: 0.45rem;
       border-width: 1px;
     }
 
+    .btn-outline-dark {
+      border-radius: 8px;
+    }
+
     .alert {
-      border-radius: 999px;
+      border-radius: 8px;
       max-width: 550px;
       margin: 0 auto 1.5rem;
     }
 
+    .spam-hint {
+      text-align: center;
+      max-width: 550px;
+      margin: -0.75rem auto 1.5rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
     .unsubscribe-card {
-      /* make unsubscribe visually lighter/smaller */
-      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
-      background: rgba(255, 255, 255, 0.92);
+      background: #ffffff;
     }
 
     .unsubscribe-body {
@@ -164,20 +164,25 @@
     }
 
     .unsubscribe-title {
-      font-size: 0.85rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #9ca3af;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
       margin-bottom: 0.35rem;
     }
 
     .unsubscribe-text {
       font-size: 0.8rem;
-      color: var(--text-muted);
+      color: var(--muted);
+    }
+
+    .stats-label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-weight: 600;
     }
 
     footer {
-      color: var(--text-muted);
+      color: var(--muted);
       font-size: 0.75rem;
       margin-top: 2.5rem;
       margin-bottom: 1.5rem;
@@ -194,13 +199,10 @@
 <div class="container py-3">
 
   <div class="hero text-center">
-    <div class="hero-badge mb-3">
-      <span class="card-pill">🌶️</span>
-      <span>MIT Dining Radar</span>
-    </div>
+    <div class="hero-emoji mb-2">🌶️</div>
     {% if is_logged_in %}
       <div class="mb-2 d-flex flex-wrap align-items-center justify-content-center gap-2">
-        <span class="badge rounded-pill bg-light text-dark border">
+        <span class="badge bg-light text-dark border" style="border-radius:8px">
           Signed in as {{ user_email }}
         </span>
         <a class="btn btn-sm btn-primary" href="{{ profile_url }}">Profile</a>
@@ -222,7 +224,7 @@
     {% endif %}
     <h1 class="hero-title mb-2">Get a heads-up on your favorite foods</h1>
     <p class="hero-subtitle">
-      Tell us your <strong>magic words</strong> (“jalapeño”, “tater tots”, “shrimp”) and we’ll email you
+      Tell us your <strong>magic words</strong> ("jalapeño", "tater tots", "shrimp") and we'll email you
       when they appear on the MIT dining menus.
     </p>
   </div>
@@ -231,15 +233,20 @@
     <div class="alert alert-info text-center">
       {{ message }}
     </div>
+    {% if "Check your email" in message %}
+      <p class="spam-hint">
+        Didn't get it? Check your spam folder and add us to your contacts.
+      </p>
+    {% endif %}
   {% endif %}
 
   <div class="row g-4 justify-content-center">
-    <!-- Subscribe card (bigger, primary) -->
+    <!-- Subscribe card -->
     <div class="col-lg-7 col-md-8">
-      <div class="card h-100">
-        <div class="card-header-soft">
-          <div class="card-pill">📬</div>
-          <p class="card-title-main mb-0">Subscribe / Update</p>
+      <div class="card card-accent-orange h-100">
+        <div class="card-header-clean">
+          <span class="card-icon">📬</span>
+          <p class="card-title">Subscribe / Update</p>
         </div>
         <div class="card-body">
           {% if is_logged_in %}
@@ -254,7 +261,7 @@
                      placeholder="jalapeno, shrimp, tater tots"
                      required>
               <div class="form-text">
-                Comma-separated list. If any menu item contains these words, you’ll get an email.
+                Comma-separated list. If any menu item contains these words, you'll get an email.
               </div>
             </div>
 
@@ -266,7 +273,7 @@
                 {% endfor %}
               </select>
               <div class="form-text">
-                Choose halls to watch, or leave blank to watch <strong>all</strong>. You’ll see your picks as little tags —
+                Choose halls to watch, or leave blank to watch <strong>all</strong>. You'll see your picks as little tags —
                 click the ✕ to remove.
               </div>
             </div>
@@ -287,13 +294,13 @@
       </div>
     </div>
 
-    <!-- Unsubscribe card (smaller, lighter) -->
+    <!-- Unsubscribe card -->
     <div class="col-lg-4 col-md-8">
-      <div class="card unsubscribe-card">
+      <div class="card unsubscribe-card card-accent-pink">
         <div class="unsubscribe-body">
           <div class="unsubscribe-title">Not feeling the heat?</div>
           <p class="unsubscribe-text mb-3">
-            One click and we’ll unsubscribe you from all alerts. No spam, no drama.
+            One click and we'll unsubscribe you from all alerts. No spam, no drama.
           </p>
           {% if is_logged_in %}
           <form method="post" action="{{ url_for('unsubscribe') }}">
@@ -314,9 +321,9 @@
 
   <div class="row justify-content-center mt-4">
     <div class="col-lg-8">
-      <div class="card p-3">
+      <div class="card card-accent-cyan p-3">
         <div class="d-flex flex-wrap align-items-center justify-content-between mb-2">
-          <div class="text-uppercase small text-muted">Community stats</div>
+          <div class="stats-label">Community stats</div>
           <a class="small text-decoration-none" href="{{ url_for('stats') }}">View full stats</a>
         </div>
         <div class="row text-center g-3">
@@ -361,7 +368,7 @@
 
   <footer class="text-center">
     <small>
-      Built with excessive love for jalapeño poppers. One row per email, many magic words. Hi, I’m Denis 👋
+      Built with love for jalapeño poppers. Hi, I'm Denis 👋
     </small>
   </footer>
 </div>
