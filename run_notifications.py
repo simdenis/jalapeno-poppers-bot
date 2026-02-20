@@ -131,9 +131,9 @@ def main():
             lines.append(f"{hall_name}:")
 
             for kw in sorted(hall_data.keys()):
-                meals = sorted(hall_data[kw])
-                meal_str = ", ".join(meals)
-                lines.append(f"  - {kw} — {meal_str}")
+                for item_name, meals in sorted(hall_data[kw].items()):
+                    meal_str = ", ".join(sorted(meals))
+                    lines.append(f"  - {item_name} — {meal_str}")
 
             lines.append("")  # blank line between halls
 
@@ -165,9 +165,9 @@ def main():
             html_lines.append(f"<h3 style=\"margin: 12px 0 6px;\">{hall_name}</h3>")
             html_lines.append("<ul style=\"margin: 0 0 8px; padding-left: 18px;\">")
             for kw in sorted(hall_data.keys()):
-                meals = sorted(hall_data[kw])
-                meal_str = ", ".join(meals)
-                html_lines.append(f"<li><strong>{kw}</strong> — {meal_str}</li>")
+                for item_name, meals in sorted(hall_data[kw].items()):
+                    meal_str = ", ".join(sorted(meals))
+                    html_lines.append(f"<li><strong>{item_name}</strong> — <span style=\"color: #6b7280\">{meal_str}</span></li>")
             html_lines.append("</ul>")
         html_lines.append("</div>")
         if unsubscribe_link:

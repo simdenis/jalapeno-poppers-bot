@@ -135,8 +135,10 @@
             <div class="mb-3">
               <strong>{{ hall_name }}</strong>
               <ul class="mb-0">
-                {% for kw in matches[hall_name] %}
-                  <li>{{ kw }} — {{ matches[hall_name][kw] | join(', ') }}</li>
+                {% for kw, kw_items in matches[hall_name].items() %}
+                  {% for item_name, meals in kw_items.items() %}
+                    <li>{{ item_name }} — {{ meals | sort | join(', ') }}</li>
+                  {% endfor %}
                 {% endfor %}
               </ul>
             </div>
