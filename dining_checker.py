@@ -441,19 +441,20 @@ def extract_week_by_day(html: str) -> dict[str, dict[str, list[str]]]:
 def _find_keyword_details_from_items(
     items_by_meal: dict[str, list[str]],
     keywords: list[str]
-) -> Dict[str, Set[str]]:
+) -> Dict[str, Dict[str, Set[str]]]:
+    """Return {keyword: {item_name: {meals}}} for all matching items."""
     kw_list = [k.strip() for k in keywords if k and k.strip()]
     kw_list = list(dict.fromkeys(kw_list))
     if not kw_list:
         return {}
 
-    matches: Dict[str, Set[str]] = {}
+    matches: Dict[str, Dict[str, Set[str]]] = {}
     for meal_label, items in items_by_meal.items():
         for item in items:
             item_tokens = _tokenize(item)
             for kw in kw_list:
                 if _contains_sequence(item_tokens, _tokenize(kw)):
-                    matches.setdefault(kw, set()).add(meal_label)
+                    matches.setdefault(kw, {}).setdefault(item, set()).add(meal_label)
     return matches
 
 
@@ -568,7 +569,7 @@ def find_item_locations(keywords: list[str], halls_filter = None) -> list[str]:
 def find_keyword_details(
     keywords: List[str],
     halls_filter
-) -> Dict[str, Dict[str, Set[str]]]:
+) -> Dict[str, Dict[str, Dict[str, Set[str]]]]:
     """
     For a list of keywords like ["jalapeno", "shrimp"], return a structure:
 
