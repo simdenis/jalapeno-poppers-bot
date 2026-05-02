@@ -1,7 +1,11 @@
 # db.py
 import os
+import hashlib
+import json
+from contextlib import contextmanager
 from dotenv import load_dotenv
 import psycopg2
+from psycopg2.pool import ThreadedConnectionPool
 
 load_dotenv()
 
@@ -10,15 +14,38 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL is not set")
 
+_pool: ThreadedConnectionPool | None = None
 
+
+def _get_pool() -> ThreadedConnectionPool:
+    global _pool
+    if _pool is None:
+        _pool = ThreadedConnectionPool(1, 10, DATABASE_URL)
+    return _pool
+
+
+@contextmanager
 def get_conn():
-    """
-    Return a psycopg2 connection to Postgres.
-    autocommit=True so we don't have to call conn.commit() manually.
-    """
-    conn = psycopg2.connect(DATABASE_URL)
-    conn.autocommit = True
-    return conn
+    pool = _get_pool()
+    conn = pool.getconn()
+    try:
+        conn.autocommit = True
+        yield conn
+    finally:
+        pool.putconn(conn)
+
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def parse_json_list(s: str) -> list:
+    if not s:
+        return []
+    try:
+        return json.loads(s)
+    except Exception:
+        return []
 
 
 def ensure_schema():

@@ -1,13 +1,13 @@
 from flask import Flask, render_template, request, session, redirect, url_for
+import html as html_mod
 import os
 import json
 import secrets
-import hashlib
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 from collections import Counter
 from dotenv import load_dotenv
-from db import get_conn, ensure_schema
+from db import get_conn, ensure_schema, hash_token, parse_json_list
 from dining_checker import (
     DINING_URLS,
     find_keyword_details,
@@ -74,9 +74,6 @@ def _is_mit_email(email: str) -> bool:
     return email.lower().endswith(f"@{MIT_EMAIL_DOMAIN}")
 
 
-def _hash_token(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
-
 
 def _upsert_user_by_email(email: str) -> int:
     with get_conn() as conn:
@@ -96,8 +93,8 @@ def _upsert_user_by_email(email: str) -> int:
 def _create_login_token(email: str) -> str:
     user_id = _upsert_user_by_email(email)
     token = secrets.token_urlsafe(32)
-    token_hash = _hash_token(token)
-    expires_at = datetime.utcnow() + timedelta(minutes=MAGIC_TOKEN_TTL_MINUTES)
+    token_hash = hash_token(token)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=MAGIC_TOKEN_TTL_MINUTES)
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -120,7 +117,7 @@ def _is_rate_limited(email: str) -> bool:
         return False
     if email.lower() in RATE_LIMIT_BYPASS_EMAILS:
         return False
-    window_start = datetime.utcnow() - timedelta(minutes=LOGIN_RATE_LIMIT_WINDOW_MINUTES)
+    window_start = datetime.now(timezone.utc) - timedelta(minutes=LOGIN_RATE_LIMIT_WINDOW_MINUTES)
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -138,8 +135,8 @@ def _is_rate_limited(email: str) -> bool:
 
 def _create_unsubscribe_token(user_id: int) -> str:
     token = secrets.token_urlsafe(32)
-    token_hash = _hash_token(token)
-    expires_at = datetime.utcnow() + timedelta(days=UNSUBSCRIBE_TOKEN_TTL_DAYS)
+    token_hash = hash_token(token)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=UNSUBSCRIBE_TOKEN_TTL_DAYS)
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -156,7 +153,7 @@ def _create_unsubscribe_token(user_id: int) -> str:
 
 
 def _consume_unsubscribe_token(token: str):
-    token_hash = _hash_token(token)
+    token_hash = hash_token(token)
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -177,7 +174,7 @@ def _consume_unsubscribe_token(token: str):
 
 
 def _consume_login_token(token: str):
-    token_hash = _hash_token(token)
+    token_hash = hash_token(token)
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -224,17 +221,9 @@ def _get_subscription(user_id: int):
         return None
 
     kw_json, halls_json, last_notified = row
-    try:
-        keywords = json.loads(kw_json) if kw_json else []
-    except Exception:
-        keywords = []
-    try:
-        halls = json.loads(halls_json) if halls_json else []
-    except Exception:
-        halls = []
     return {
-        "keywords": keywords,
-        "halls": halls,
+        "keywords": parse_json_list(kw_json),
+        "halls": parse_json_list(halls_json),
         "last_notified": last_notified,
     }
 
@@ -263,17 +252,8 @@ def index():
 
     for kw_json, halls_json in rows:
         total_subscriptions += 1
-        try:
-            keywords = json.loads(kw_json) if kw_json else []
-        except Exception:
-            keywords = []
-        try:
-            halls = json.loads(halls_json) if halls_json else []
-        except Exception:
-            halls = []
-
-        keyword_counts.update([k for k in keywords if k])
-        hall_counts.update([h for h in halls if h])
+        keyword_counts.update(k for k in parse_json_list(kw_json) if k)
+        hall_counts.update(h for h in parse_json_list(halls_json) if h)
 
     return render_template(
         "index.html",
@@ -436,11 +416,7 @@ def profile():
                 cur.execute("SELECT item_keywords FROM subscriptions")
                 rows = cur.fetchall()
         for (kw_json,) in rows:
-            try:
-                keywords = json.loads(kw_json) if kw_json else []
-            except Exception:
-                keywords = []
-            keyword_counts.update([k for k in keywords if k])
+            keyword_counts.update(k for k in parse_json_list(kw_json) if k)
         existing = set(subscription["keywords"])
         suggestions = [k for k, _ in keyword_counts.most_common() if k not in existing][:5]
     return render_template(
@@ -532,17 +508,8 @@ def stats():
 
     for kw_json, halls_json in rows:
         total_subscriptions += 1
-        try:
-            keywords = json.loads(kw_json) if kw_json else []
-        except Exception:
-            keywords = []
-        try:
-            halls = json.loads(halls_json) if halls_json else []
-        except Exception:
-            halls = []
-
-        keyword_counts.update([k for k in keywords if k])
-        hall_counts.update([h for h in halls if h])
+        keyword_counts.update(k for k in parse_json_list(kw_json) if k)
+        hall_counts.update(h for h in parse_json_list(halls_json) if h)
 
     return render_template(
         "stats.html",
@@ -560,7 +527,7 @@ def debug_menu():
 
     hall = request.args.get("hall", "")
     if not hall or hall not in DINING_URLS:
-        hall_list = "".join(f"<li>{h}</li>" for h in DINING_URLS.keys())
+        hall_list = "".join(f"<li>{html_mod.escape(h)}</li>" for h in DINING_URLS.keys())
         return (
             "<h1>Menu debug</h1>"
             "<p>Provide ?hall=Hall%20Name</p>"
@@ -570,11 +537,11 @@ def debug_menu():
     menu = get_today_menu_by_meal(halls_filter=[hall], max_items_per_meal=60)
     items_by_meal = menu.get(hall, {})
     if not items_by_meal:
-        return f"No menu data for {hall}", 500
+        return f"No menu data for {html_mod.escape(hall)}", 500
     sections = []
     for meal, items in items_by_meal.items():
-        items_html = "".join(f"<li>{item}</li>" for item in items[:30])
-        sections.append(f"<h2>{meal}</h2><ul>{items_html}</ul>")
+        items_html = "".join(f"<li>{html_mod.escape(item)}</li>" for item in items[:30])
+        sections.append(f"<h2>{html_mod.escape(meal)}</h2><ul>{items_html}</ul>")
     return "<h1>Menu debug</h1>" + "".join(sections)
 
 
@@ -615,9 +582,7 @@ def subscribe():
 
             if row:
                 current_kw_json, current_halls_json = row
-                current_keywords = (
-                    json.loads(current_kw_json) if current_kw_json else []
-                )
+                current_keywords = parse_json_list(current_kw_json)
 
                 # Merge keywords
                 for kw in new_keywords:
@@ -625,10 +590,7 @@ def subscribe():
                         current_keywords.append(kw)
 
                 # Merge halls
-                if current_halls_json:
-                    stored_halls = json.loads(current_halls_json)
-                else:
-                    stored_halls = []
+                stored_halls = parse_json_list(current_halls_json)
 
                 if halls_list:
                     for h in halls_list:
@@ -778,7 +740,7 @@ def debug_subscriptions():
             )
             rows = cur.fetchall()
 
-    html = [
+    parts = [
         "<h1>Subscriptions</h1>",
         "<table border='1' cellpadding='4'>",
         "<tr><th>Email</th><th>Keywords (JSON)</th>"
@@ -786,17 +748,17 @@ def debug_subscriptions():
     ]
 
     for email, kw_json, halls_json, last_notified in rows:
-        html.append(
+        parts.append(
             "<tr>"
-            f"<td>{email}</td>"
-            f"<td><code>{kw_json}</code></td>"
-            f"<td><code>{halls_json}</code></td>"
-            f"<td>{last_notified}</td>"
+            f"<td>{html_mod.escape(email or '')}</td>"
+            f"<td><code>{html_mod.escape(kw_json or '')}</code></td>"
+            f"<td><code>{html_mod.escape(halls_json or '')}</code></td>"
+            f"<td>{html_mod.escape(str(last_notified or ''))}</td>"
             "</tr>"
         )
 
-    html.append("</table>")
-    return "\n".join(html)
+    parts.append("</table>")
+    return "\n".join(parts)
 
 
 if __name__ == "__main__":

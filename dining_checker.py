@@ -3,6 +3,7 @@
 import os
 import smtplib
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.message import EmailMessage
 from typing import Dict, List, Set
 from datetime import date
@@ -522,19 +523,29 @@ def get_today_menu_by_meal(
     else:
         allowed_halls = set(DINING_URLS.keys())
 
+    halls_to_check = [(h, u) for h, u in DINING_URLS.items() if h in allowed_halls]
     results: dict[str, dict[str, list[str]]] = {}
-    for hall, url in DINING_URLS.items():
-        if hall not in allowed_halls:
-            continue
+
+    def _fetch(hall: str, url: str):
         items_by_meal, _ = _load_today_menu(hall, url)
         if not items_by_meal:
-            continue
-        trimmed = {}
-        for meal, items in items_by_meal.items():
-            if meal not in allowed_meals:
-                continue
-            trimmed[meal] = items[:max_items_per_meal]
-        results[hall] = trimmed
+            return hall, {}
+        trimmed = {
+            meal: items[:max_items_per_meal]
+            for meal, items in items_by_meal.items()
+            if meal in allowed_meals
+        }
+        return hall, trimmed
+
+    with ThreadPoolExecutor(max_workers=len(halls_to_check)) as ex:
+        futures = {ex.submit(_fetch, h, u): h for h, u in halls_to_check}
+        for future in as_completed(futures):
+            try:
+                hall, trimmed = future.result()
+                if trimmed:
+                    results[hall] = trimmed
+            except Exception as e:
+                print(f"[WARN] Error fetching {futures[future]}: {e}")
 
     return results
 
@@ -600,17 +611,22 @@ def find_keyword_details(
     else:
         allowed_halls = set(DINING_URLS.keys())
 
+    halls_to_check = [(h, u) for h, u in DINING_URLS.items() if h in allowed_halls]
     results: Dict[str, Dict[str, Set[str]]] = {}
 
-    for hall, url in DINING_URLS.items():
-        if hall not in allowed_halls:
-            continue
-
+    def _fetch(hall: str, url: str):
         items_by_meal, _ = _load_today_menu(hall, url)
-        hall_matches = _find_keyword_details_from_items(items_by_meal, kw_list)
+        return hall, _find_keyword_details_from_items(items_by_meal, kw_list)
 
-        if hall_matches:
-            results[hall] = hall_matches
+    with ThreadPoolExecutor(max_workers=len(halls_to_check)) as ex:
+        futures = {ex.submit(_fetch, h, u): h for h, u in halls_to_check}
+        for future in as_completed(futures):
+            try:
+                hall, hall_matches = future.result()
+                if hall_matches:
+                    results[hall] = hall_matches
+            except Exception as e:
+                print(f"[WARN] Error fetching {futures[future]}: {e}")
 
     return results
 

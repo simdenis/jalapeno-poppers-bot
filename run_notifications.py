@@ -1,12 +1,10 @@
 # run_notifications.py
 
 import os
-import json
-import hashlib
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from dotenv import load_dotenv
 
-from db import get_conn, ensure_schema
+from db import get_conn, ensure_schema, hash_token, parse_json_list
 from dining_checker import find_keyword_details, send_email
 load_dotenv()
 DEBUG_ALWAYS_NOTIFY = os.getenv("DEBUG_ALWAYS_NOTIFY", "false").lower() == "true"
@@ -32,16 +30,8 @@ def get_subscriptions():
 
     subs = []
     for email, kw_json, halls_json, last_notified in rows:
-        try:
-            keywords = json.loads(kw_json) if kw_json else []
-        except Exception:
-            keywords = []
-
-        try:
-            halls = json.loads(halls_json) if halls_json else None
-        except Exception:
-            halls = None
-
+        keywords = parse_json_list(kw_json)
+        halls = parse_json_list(halls_json) or None
         subs.append((email, keywords, halls, last_notified))
 
     return subs
@@ -63,10 +53,6 @@ def update_last_notified(email: str, when: date):
             )
 
 
-def _hash_token(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
-
-
 def _create_unsubscribe_token_for_email(email: str) -> str | None:
     if not BASE_URL:
         return None
@@ -80,8 +66,8 @@ def _create_unsubscribe_token_for_email(email: str) -> str | None:
             user_id = row[0]
 
             token = os.urandom(24).hex()
-            token_hash = _hash_token(token)
-            expires_at = datetime.utcnow() + timedelta(days=UNSUBSCRIBE_TOKEN_TTL_DAYS)
+            token_hash = hash_token(token)
+            expires_at = datetime.now(timezone.utc) + timedelta(days=UNSUBSCRIBE_TOKEN_TTL_DAYS)
             cur.execute(
                 """
                 INSERT INTO unsubscribe_tokens (token_hash, user_id, expires_at)
@@ -154,7 +140,20 @@ def main():
             )
 
         body = "\n".join(lines)
-        subject = "MIT Dining Alerts — today’s matches"
+
+        # Build subject from the actual matching dish names
+        all_items: list[str] = []
+        for hall_data in details.values():
+            for item_meals in hall_data.values():
+                for item_name in item_meals:
+                    if item_name not in all_items:
+                        all_items.append(item_name)
+        if len(all_items) == 1:
+            subject = f"MIT Dining Alerts — {all_items[0]} today"
+        elif len(all_items) == 2:
+            subject = f"MIT Dining Alerts — {all_items[0]} & {all_items[1]} today"
+        else:
+            subject = f"MIT Dining Alerts — {all_items[0]} & {len(all_items) - 1} more today"
         html_lines = []
         html_lines.append("<div style=\"font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', Arial, sans-serif; line-height: 1.5;\">")
         html_lines.append(f"<h2 style=\"margin: 0 0 8px;\">MIT Dining Alerts — {today.isoformat()}</h2>")
